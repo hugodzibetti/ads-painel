@@ -120,6 +120,33 @@ def test_build_user_prompt_contains_json_format():
     assert '"confidence"' in prompt
 
 
+def test_build_user_prompt_handles_invalid_timestamp():
+    """Regression test: a malformed timestamp must not blow up the whole batch."""
+    messages = [
+        {
+            'id': 1,
+            'group_label': 'alunos',
+            'author': 'João',
+            'body': 'Prova de redes na sexta',
+            'timestamp': 'not-a-date'
+        },
+        {
+            'id': 2,
+            'group_label': 'profs',
+            'author': 'Prof. Silva',
+            'body': 'Trabalho entrega até terça',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+    ]
+
+    prompt = build_user_prompt(messages)
+    assert prompt is not None
+    assert '[id=1]' in prompt
+    assert '[id=2]' in prompt
+    assert 'Prova de redes na sexta' in prompt
+    assert 'Trabalho entrega até terça' in prompt
+
+
 def test_build_user_prompt_date_context():
     """Test that user prompt includes date/time context."""
     messages = [
@@ -152,6 +179,9 @@ if __name__ == '__main__':
 
     test_build_user_prompt_multiple_messages()
     print("✓ test_build_user_prompt_multiple_messages")
+
+    test_build_user_prompt_handles_invalid_timestamp()
+    print("✓ test_build_user_prompt_handles_invalid_timestamp")
 
     test_build_user_prompt_contains_json_format()
     print("✓ test_build_user_prompt_contains_json_format")
