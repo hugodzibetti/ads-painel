@@ -3,6 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+const dbModuleTestDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-db-module-'));
+process.env.DB_PATH = path.join(dbModuleTestDir, 'app.db');
+const dbModule = require('../db');
+
 let originalEnv;
 
 function createTestDb() {
@@ -111,6 +115,35 @@ function testMultipleGroupLabels() {
   fs.rmSync(tempDir, { recursive: true });
 }
 
+function testInsertMessageInvalidGroupLabel() {
+  let threw = false;
+  try {
+    dbModule.insertMessage('msg-invalid-label', 'invalido', 'João', 'Test', new Date().toISOString());
+  } catch (err) {
+    threw = true;
+    console.assert(err.message.includes('groupLabel inválido'), 'Error should mention invalid groupLabel');
+    console.assert(err.message.includes('invalido'), 'Error should include the offending value');
+  }
+  console.assert(threw, 'insertMessage should throw for invalid groupLabel');
+
+  const realDb = dbModule.getDb();
+  const row = realDb.prepare('SELECT * FROM messages WHERE wa_message_id = ?').get('msg-invalid-label');
+  console.assert(row === undefined, 'No row should be inserted for invalid groupLabel');
+}
+
+function testReadSchemaMissingFile() {
+  const badPath = path.join(os.tmpdir(), 'schema-missing-' + Date.now(), 'schema.sql');
+  let threw = false;
+  try {
+    dbModule.readSchema(badPath);
+  } catch (err) {
+    threw = true;
+    console.assert(err.message.includes(badPath), 'Error should include the attempted schema path');
+    console.assert(err.message.toLowerCase().includes('schema'), 'Error should mention schema');
+  }
+  console.assert(threw, 'readSchema should throw when schema file does not exist');
+}
+
 if (require.main === module) {
   try {
     testInsertMessage();
@@ -125,10 +158,18 @@ if (require.main === module) {
     testMultipleGroupLabels();
     console.log('✓ testMultipleGroupLabels');
 
+    testInsertMessageInvalidGroupLabel();
+    console.log('✓ testInsertMessageInvalidGroupLabel');
+
+    testReadSchemaMissingFile();
+    console.log('✓ testReadSchemaMissingFile');
+
     console.log('\nAll tests passed!');
   } catch (err) {
     console.error('Test failed:', err.message);
     process.exit(1);
+  } finally {
+    fs.rmSync(dbModuleTestDir, { recursive: true, force: true });
   }
 }
 
@@ -137,4 +178,6 @@ module.exports = {
   testInsertDuplicateMessage,
   testMessageWithoutBody,
   testMultipleGroupLabels,
+  testInsertMessageInvalidGroupLabel,
+  testReadSchemaMissingFile,
 };
