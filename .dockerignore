@@ -1,0 +1,14 @@
+.git
+.env
+venv/
+node_modules/
+__pycache__/
+*.pyc
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+.streamlit/
+bot/.wwebjs_auth/
+bot/.wwebjs_cache/
+README.md
