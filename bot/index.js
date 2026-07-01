@@ -5,7 +5,7 @@ const { getDb, initializeDb, insertMessage } = require('./db');
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'ads-painel-bot' }),
-  puppeteerArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
+  puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] },
 });
 
 const groupIdToLabel = {};

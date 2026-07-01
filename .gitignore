@@ -10,3 +10,5 @@ data/*.db-shm
 .streamlit/
 .superpowers/
 .playwright-mcp/
+bot/.wwebjs_auth/
+bot/.wwebjs_cache/
