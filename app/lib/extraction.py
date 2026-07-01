@@ -3,7 +3,6 @@ import re
 import os
 import logging
 from datetime import datetime
-import unicodedata
 from openai import OpenAI
 from lib.db import (
     fetch_unprocessed_messages,
@@ -13,6 +12,7 @@ from lib.db import (
     check_duplicate_activity,
 )
 from lib.prompts import get_system_prompt, build_user_prompt
+from lib.text import normalize_title
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +26,6 @@ def init_openai_client():
         raise ValueError("OPENCODE_API_KEY is not set")
 
     return OpenAI(api_key=api_key, base_url=base_url), model
-
-def normalize_title(title):
-    """Normalize title for dedup: lowercase + remove accents."""
-    title = title.lower()
-    title = ''.join(
-        c for c in unicodedata.normalize('NFD', title)
-        if unicodedata.category(c) != 'Mn'
-    )
-    return title
 
 def extract_json_from_response(text):
     """Extract JSON object from LLM response, handling potential markdown wrapping."""
