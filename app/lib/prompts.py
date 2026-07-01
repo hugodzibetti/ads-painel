@@ -1,5 +1,8 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+import logging
 import pytz
+
+logger = logging.getLogger(__name__)
 
 def get_system_prompt():
     """Build the system prompt for extraction."""
@@ -74,9 +77,13 @@ Analise as seguintes mensagens e extraia atividades acadêmicas:
 
 """
     for msg in messages:
-        msg_ts = datetime.fromisoformat(msg['timestamp'])
-        msg_ts_local = msg_ts.replace(tzinfo=timezone.utc).astimezone(tz)
-        msg_dt_str = msg_ts_local.strftime('%Y-%m-%d %H:%M')
+        try:
+            msg_ts = datetime.fromisoformat(msg.get('timestamp'))
+            msg_ts_local = msg_ts.replace(tzinfo=timezone.utc).astimezone(tz)
+            msg_dt_str = msg_ts_local.strftime('%Y-%m-%d %H:%M')
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid timestamp for message id={msg.get('id')}: {msg.get('timestamp')!r}")
+            msg_dt_str = f"{msg.get('timestamp')} (timestamp inválido)"
         group_label = msg.get('group_label', 'desconhecido')
 
         prompt += f"[id={msg['id']}][{group_label}] ({msg_dt_str}) {msg['author']}: {msg['body']}\n"

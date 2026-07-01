@@ -1,14 +1,45 @@
 import json
+import os
+import sqlite3
 import sys
+import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.extraction import (
     normalize_title,
     extract_json_from_response,
+    run_extraction,
 )
+
+
+def create_test_db():
+    """Create a temporary sqlite db file initialized with the shared schema."""
+    db_fd, db_path = tempfile.mkstemp(suffix='.db')
+    os.close(db_fd)
+
+    schema_path = Path(__file__).parent.parent.parent / 'shared' / 'schema.sql'
+    schema = schema_path.read_text()
+
+    conn = sqlite3.connect(db_path)
+    conn.executescript(schema)
+    conn.commit()
+    conn.close()
+
+    return db_path
+
+
+def make_mock_openai_response(items):
+    """Build a fake OpenAI chat.completions.create() response."""
+    response = MagicMock()
+    response.usage.prompt_tokens = 10
+    response.usage.completion_tokens = 5
+    response.choices = [MagicMock()]
+    response.choices[0].message.content = json.dumps({"items": items})
+    return response
 
 
 def test_normalize_title():
@@ -104,6 +135,51 @@ def test_extract_json_multiple_items():
     assert result['items'][2]['type'] == 'evento'
 
 
+def test_run_extraction_marks_processed_despite_bad_timestamp():
+    """
+    Regression test: a message with a malformed timestamp must not stop the
+    batch from reaching the API call and being marked processed=1 — otherwise
+    it gets retried forever on every "Atualizar" click (see CLAUDE.md contract:
+    only network/auth errors on the API call itself should leave processed=0).
+    """
+    db_path = create_test_db()
+    os.environ['DB_PATH'] = db_path
+    os.environ['OPENCODE_API_KEY'] = 'test-key'
+
+    conn = sqlite3.connect(db_path)
+    good_ts = datetime.now(timezone.utc).isoformat()
+    msg1_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg1', 'alunos', 'João', 'Prova de redes amanhã', 'not-a-date', 0)
+    ).fetchone()[0]
+    msg2_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg2', 'profs', 'Prof. Silva', 'Trabalho entrega terça', good_ts, 0)
+    ).fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    mock_response = make_mock_openai_response([])
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
+    with patch('lib.extraction.OpenAI', return_value=mock_client):
+        result = run_extraction(max_batches=1)
+
+    assert result['errors'] == []
+    assert result['messages_processed'] == 2
+    assert result['messages_remaining'] == 0
+
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT id, processed FROM messages WHERE id IN (?, ?)", (msg1_id, msg2_id)
+    ).fetchall()
+    conn.close()
+    assert all(processed == 1 for _, processed in rows)
+
+    os.unlink(db_path)
+
+
 if __name__ == '__main__':
     test_normalize_title()
     print("✓ test_normalize_title")
@@ -128,5 +204,8 @@ if __name__ == '__main__':
 
     test_extract_json_multiple_items()
     print("✓ test_extract_json_multiple_items")
+
+    test_run_extraction_marks_processed_despite_bad_timestamp()
+    print("✓ test_run_extraction_marks_processed_despite_bad_timestamp")
 
     print("\nAll tests passed!")
