@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from lib.text import normalize_title
 
 load_dotenv(Path(__file__).resolve().parents[2] / '.env')
 
@@ -145,19 +146,23 @@ def update_activity_status(activity_id, status):
         conn.close()
 
 def check_duplicate_activity(type_, title_normalized, due_date):
-    """Check if a similar activity already exists."""
+    """Check if a similar activity already exists.
+
+    title_normalized must already be normalized via lib.text.normalize_title();
+    candidate titles from the DB are normalized here for the comparison since
+    stored titles keep their original accents/casing.
+    """
     conn = get_connection()
     try:
         cursor = conn.execute(
             """
-            SELECT id FROM activities
-            WHERE type = ? AND LOWER(title) = ? AND due_date = ? AND status != 'descartado'
-            LIMIT 1
+            SELECT title FROM activities
+            WHERE type = ? AND due_date = ? AND status != 'descartado'
             """,
-            (type_, title_normalized.lower(), due_date)
+            (type_, due_date)
         )
-        row = cursor.fetchone()
-        return row is not None
+        rows = cursor.fetchall()
+        return any(normalize_title(row['title']) == title_normalized for row in rows)
     finally:
         conn.close()
 

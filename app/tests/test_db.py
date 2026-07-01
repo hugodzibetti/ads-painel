@@ -18,6 +18,7 @@ from lib.db import (
     check_duplicate_activity,
     fetch_messages,
 )
+from lib.text import normalize_title
 
 
 def create_test_db():
@@ -162,6 +163,35 @@ def test_check_duplicate_activity():
     os.unlink(db_path)
 
 
+def test_check_duplicate_activity_ignores_accents():
+    """Duplicate detection must match regardless of accents in the stored title."""
+    db_path = create_test_db()
+    init_test_schema(db_path)
+
+    os.environ['DB_PATH'] = db_path
+
+    conn = sqlite3.connect(db_path)
+    msg_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg1', 'alunos', 'João', 'test', datetime.now(timezone.utc).isoformat(), 0)
+    ).fetchone()[0]
+
+    conn.execute(
+        "INSERT INTO activities (type, title, due_date, source_message_id, status, confidence) VALUES (?, ?, ?, ?, ?, ?)",
+        ('prova', 'Cálculo I', '2026-07-10', msg_id, 'pendente', 'alta')
+    )
+    conn.commit()
+    conn.close()
+
+    is_duplicate = check_duplicate_activity('prova', normalize_title('Calculo I'), '2026-07-10')
+    assert is_duplicate == True
+
+    is_duplicate = check_duplicate_activity('prova', normalize_title('CALCULO I'), '2026-07-10')
+    assert is_duplicate == True
+
+    os.unlink(db_path)
+
+
 def test_mark_processed():
     """Test marking messages as processed."""
     db_path = create_test_db()
@@ -231,6 +261,9 @@ if __name__ == '__main__':
 
     test_check_duplicate_activity()
     print("✓ test_check_duplicate_activity")
+
+    test_check_duplicate_activity_ignores_accents()
+    print("✓ test_check_duplicate_activity_ignores_accents")
 
     test_mark_processed()
     print("✓ test_mark_processed")
