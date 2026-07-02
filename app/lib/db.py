@@ -199,6 +199,23 @@ def fetch_messages(limit=200, offset=0, search_query=None):
     finally:
         conn.close()
 
+def fetch_messages_count(search_query=None):
+    """Count messages with optional search, mirroring fetch_messages' WHERE clause."""
+    conn = get_connection()
+    try:
+        if search_query:
+            query = "SELECT COUNT(*) as count FROM messages WHERE author LIKE ? OR body LIKE ?"
+            params = (f'%{search_query}%', f'%{search_query}%')
+        else:
+            query = "SELECT COUNT(*) as count FROM messages"
+            params = ()
+
+        cursor = conn.execute(query, params)
+        row = cursor.fetchone()
+        return row['count']
+    finally:
+        conn.close()
+
 def insert_message(wa_message_id, group_label, author, body, timestamp):
     """Insert a raw message, mirroring bot/db.js::insertMessage's swallow-on-duplicate semantics."""
     conn = get_connection()

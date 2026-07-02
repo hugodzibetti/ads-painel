@@ -17,6 +17,7 @@ from lib.db import (
     update_activity_status,
     check_duplicate_activity,
     fetch_messages,
+    fetch_messages_count,
     insert_message,
     message_similar_exists,
 )
@@ -251,6 +252,33 @@ def test_fetch_messages_with_search():
     os.unlink(db_path)
 
 
+def test_fetch_messages_count():
+    """Test counting messages with and without a search filter."""
+    db_path = create_test_db()
+    init_test_schema(db_path)
+
+    os.environ['DB_PATH'] = db_path
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?)",
+        ('msg1', 'alunos', 'João', 'prova de redes', datetime.now(timezone.utc).isoformat(), 0)
+    )
+    conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?)",
+        ('msg2', 'alunos', 'Maria', 'trabalho de banco', datetime.now(timezone.utc).isoformat(), 0)
+    )
+    conn.commit()
+    conn.close()
+
+    assert fetch_messages_count() == 2
+    assert fetch_messages_count(search_query='prova') == 1
+    assert fetch_messages_count(search_query='Maria') == 1
+    assert fetch_messages_count(search_query='inexistente') == 0
+
+    os.unlink(db_path)
+
+
 def test_insert_message_creates_row():
     db_path = create_test_db()
     init_test_schema(db_path)
@@ -330,6 +358,9 @@ if __name__ == '__main__':
 
     test_fetch_messages_with_search()
     print("✓ test_fetch_messages_with_search")
+
+    test_fetch_messages_count()
+    print("✓ test_fetch_messages_count")
 
     test_insert_message_creates_row()
     print("✓ test_insert_message_creates_row")
