@@ -217,6 +217,15 @@ def insert_message(wa_message_id, group_label, author, body, timestamp):
     finally:
         conn.close()
 
+def message_exists(wa_message_id):
+    """Check whether a message with this wa_message_id has already been inserted."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute("SELECT 1 FROM messages WHERE wa_message_id = ? LIMIT 1", (wa_message_id,))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
 def message_similar_exists(group_label, author, timestamp, body):
     """Check for an existing message with the same group/author/body in the same minute."""
     conn = get_connection()

@@ -5,7 +5,6 @@ import tempfile
 import zipfile
 import json
 from pathlib import Path
-from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -27,7 +26,7 @@ def init_test_schema(db_path):
     conn.close()
 
 
-def test_find_export_txt_locates_single_txt(tmp_path=None):
+def test_find_export_txt_locates_single_txt():
     export_dir = Path(tempfile.mkdtemp())
     (export_dir / 'Conversa do WhatsApp com ADS.txt').write_text('conteudo')
     (export_dir / 'STK-001.webp').write_bytes(b'fake')
@@ -143,6 +142,39 @@ def test_process_group_pdf_uses_resolver():
     body = conn.execute("SELECT body FROM messages").fetchone()[0]
     conn.close()
     assert body == 'Edital de prova N3 extraído'
+
+    os.unlink(db_path)
+
+
+def test_process_group_reimport_does_not_duplicate_on_nondeterministic_caption():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+
+    export_dir = Path(tempfile.mkdtemp())
+    (export_dir / 'export.txt').write_text(
+        "01/07/2026 10:15 - Maria: ‎EDITAL.pdf (arquivo anexado)"
+    )
+    (export_dir / 'EDITAL.pdf').write_bytes(b'fake-pdf')
+
+    first_result = process_group(
+        export_dir, 'profs',
+        resolve_fns={'pdf': lambda path: 'Legenda A'}
+    )
+    assert first_result['inserted'] == 1
+
+    second_result = process_group(
+        export_dir, 'profs',
+        resolve_fns={'pdf': lambda path: 'Legenda B'}
+    )
+    assert second_result['inserted'] == 0
+    assert second_result['skipped_dup'] == 1
+
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute("SELECT body FROM messages").fetchall()
+    conn.close()
+    assert len(rows) == 1
+    assert rows[0][0] == 'Legenda A'
 
     os.unlink(db_path)
 

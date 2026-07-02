@@ -1,12 +1,12 @@
 import argparse
-import sys
+import shutil
 import zipfile
 import tempfile
 from pathlib import Path
 from faster_whisper import WhisperModel
 
 from lib.whatsapp_export import parse_export, synthetic_message_id
-from lib.db import insert_message, message_similar_exists
+from lib.db import insert_message, message_similar_exists, message_exists
 from lib.media_resolve import classify_media
 from lib.vision import init_vision_client, caption_image
 from lib.media_resolve import resolve_pdf, resolve_image, resolve_audio, resolve_video, pick_whisper_device
@@ -15,7 +15,7 @@ from lib.extraction import run_extraction
 
 def find_export_txt(export_dir):
     """Locate the single .txt chat log inside an extracted WhatsApp export directory."""
-    txt_files = list(Path(export_dir).glob('*.txt'))
+    txt_files = sorted(Path(export_dir).glob('*.txt'))
     if not txt_files:
         raise FileNotFoundError(f'Nenhum .txt encontrado em {export_dir}')
     return txt_files[0]
@@ -43,13 +43,17 @@ def process_group(export_dir, group_label, resolve_fns):
     skipped_dup = 0
 
     for msg in messages:
+        wa_id = synthetic_message_id(msg['group_label'], msg['timestamp'], msg['author'], msg['raw_body'])
+        if message_exists(wa_id):
+            skipped_dup += 1
+            continue
+
         body = _resolve_body(msg, export_dir, resolve_fns)
 
         if message_similar_exists(msg['group_label'], msg['author'], msg['timestamp'], body):
             skipped_dup += 1
             continue
 
-        wa_id = synthetic_message_id(msg['group_label'], msg['timestamp'], msg['author'], body)
         insert_message(wa_id, msg['group_label'], msg['author'], body, msg['timestamp'])
         inserted += 1
 
@@ -98,9 +102,14 @@ def main(argv=None):
     resolve_fns = build_resolve_fns(vision_client, vision_model, whisper_model)
 
     for path, group_label in [(args.alunos_export, 'alunos'), (args.profs_export, 'profs')]:
-        export_dir = extract_if_zip(Path(path))
-        result = process_group(export_dir, group_label, resolve_fns)
-        print(f"[{group_label}] {result['inserted']} inseridas, {result['skipped_dup']} duplicadas ignoradas, {result['total']} no total")
+        original_path = Path(path)
+        export_dir = extract_if_zip(original_path)
+        try:
+            result = process_group(export_dir, group_label, resolve_fns)
+            print(f"[{group_label}] {result['inserted']} inseridas, {result['skipped_dup']} duplicadas ignoradas, {result['total']} no total")
+        finally:
+            if original_path.suffix.lower() == '.zip':
+                shutil.rmtree(export_dir, ignore_errors=True)
 
     print("\nExtraindo atividades...")
     while True:
