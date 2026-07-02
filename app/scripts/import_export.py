@@ -1,11 +1,14 @@
 import argparse
 import shutil
 import signal
+import socket
 import wave
 import zipfile
 import tempfile
 from pathlib import Path
 from faster_whisper import WhisperModel
+
+socket.setdefaulttimeout(90)
 
 _RESOLVER_TIMEOUT_SECONDS = 45
 
