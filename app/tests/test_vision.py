@@ -24,8 +24,8 @@ def test_init_vision_client_uses_defaults():
 
     client, model = init_vision_client()
 
-    assert model == 'claude-haiku-4-5'
-    assert str(client.base_url).rstrip('/') == 'https://opencode.ai/zen/v1'
+    assert model == 'kimi-k2.7-code'
+    assert str(client.base_url).rstrip('/') == 'https://opencode.ai/zen/go/v1'
 
 
 def test_caption_image_sends_base64_and_returns_content():
@@ -35,11 +35,23 @@ def test_caption_image_sends_base64_and_returns_content():
     mock_response.choices[0].message.content = '  Edital de prova N3, entrega dia 10/07  '
     mock_client.chat.completions.create.return_value = mock_response
 
-    result = caption_image(mock_client, 'claude-haiku-4-5', b'fake-image-bytes', 'foto.jpg')
+    result = caption_image(mock_client, 'kimi-k2.7-code', b'fake-image-bytes', 'foto.jpg')
 
     assert result == 'Edital de prova N3, entrega dia 10/07'
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs['model'] == 'claude-haiku-4-5'
+    assert call_kwargs['model'] == 'kimi-k2.7-code'
     content = call_kwargs['messages'][0]['content']
     image_url = next(part['image_url']['url'] for part in content if part['type'] == 'image_url')
     assert image_url.startswith('data:image/jpeg;base64,')
+
+
+def test_caption_image_strips_think_tags():
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = '<think>\nO usuário quer saber a cor.\n</think>\nEdital de prova N3'
+    mock_client.chat.completions.create.return_value = mock_response
+
+    result = caption_image(mock_client, 'minimax-m3', b'fake-image-bytes', 'foto.jpg')
+
+    assert result == 'Edital de prova N3'

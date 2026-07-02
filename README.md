@@ -110,7 +110,7 @@ python -m scripts.import_export "/caminho/para/Conversa do WhatsApp com ADS.zip"
 
 Primeiro argumento é sempre o export do grupo **alunos**, segundo é sempre **profs**. O script nunca copia os `.zip`/mídia para dentro do repositório — extrai para uma pasta temporária do sistema, processa, e descarta.
 
-Processamento por tipo de mídia (pensado pra ficar barato): texto e PDF (extração local, de graça) são processados sempre; imagens usam Claude Haiku via `OPENCODE_VISION_BASE_URL`/`OPENCODE_VISION_MODEL` (endpoint pago por token, fora do plano Go — configure essas duas variáveis no `.env` antes de rodar); áudio e vídeo são transcritos localmente via `faster-whisper` (`large-v3`, usa GPU se disponível — sem custo de API); figurinhas são ignoradas.
+Processamento por tipo de mídia (pensado pra ficar barato): texto e PDF (extração local, de graça) são processados sempre; imagens usam `kimi-k2.7-code` via `OPENCODE_VISION_BASE_URL`/`OPENCODE_VISION_MODEL` (mesmo plano Go já assinado, sem custo extra — testado empiricamente porque nem todo modelo do Go plan tem visão real: `glm-5.2` recusa a imagem explicitamente, `kimi-k2.7-code` e `minimax-m3` leem texto de imagem corretamente); áudio e vídeo são transcritos localmente via `faster-whisper` (`large-v3`, usa GPU se disponível — sem custo de API, mas o download inicial do modelo (~3GB) é bem mais rápido com um `HF_TOKEN` gratuito configurado); figurinhas são ignoradas.
 
 Requer `ffmpeg` instalado no sistema para processar vídeos (`apt install ffmpeg`).
 

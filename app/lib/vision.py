@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 from pathlib import Path
 from openai import OpenAI
 
@@ -13,8 +14,8 @@ _MIME_BY_EXT = {
 def init_vision_client():
     """Initialize a separate OpenAI-compatible client for image captioning (not the live text pipeline's client)."""
     api_key = os.getenv('OPENCODE_API_KEY')
-    base_url = os.getenv('OPENCODE_VISION_BASE_URL', 'https://opencode.ai/zen/v1')
-    model = os.getenv('OPENCODE_VISION_MODEL', 'claude-haiku-4-5')
+    base_url = os.getenv('OPENCODE_VISION_BASE_URL', 'https://opencode.ai/zen/go/v1')
+    model = os.getenv('OPENCODE_VISION_MODEL', 'kimi-k2.7-code')
 
     if not api_key:
         raise ValueError("OPENCODE_API_KEY is not set")
@@ -44,4 +45,6 @@ def caption_image(client, model, image_bytes, filename):
         }],
         max_tokens=150,
     )
-    return response.choices[0].message.content.strip()
+    content = response.choices[0].message.content.strip()
+    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+    return content
