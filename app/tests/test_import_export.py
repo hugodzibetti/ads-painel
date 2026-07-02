@@ -2,6 +2,7 @@ import sys
 import os
 import sqlite3
 import tempfile
+import time
 import zipfile
 import json
 from pathlib import Path
@@ -9,7 +10,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.import_export import find_export_txt, extract_if_zip, process_group
+from scripts.import_export import find_export_txt, extract_if_zip, process_group, _run_with_timeout
 
 
 def create_test_db():
@@ -144,6 +145,26 @@ def test_process_group_pdf_uses_resolver():
     assert body == 'Edital de prova N3 extraído'
 
     os.unlink(db_path)
+
+
+def test_run_with_timeout_returns_value_when_fast_enough():
+    result = _run_with_timeout(lambda x: x * 2, 21, timeout_seconds=1)
+    assert result == 42
+
+
+def test_run_with_timeout_raises_when_function_hangs():
+    def hangs(_):
+        time.sleep(5)
+        return 'nunca deveria chegar aqui'
+
+    start = time.time()
+    try:
+        _run_with_timeout(hangs, None, timeout_seconds=0.2)
+        assert False, "should have raised"
+    except TimeoutError as e:
+        assert 'travou' in str(e)
+    elapsed = time.time() - start
+    assert elapsed < 1, f"should give up around the 0.2s timeout, took {elapsed}s"
 
 
 def test_process_group_resolver_failure_falls_back_to_placeholder():

@@ -1,10 +1,33 @@
 import argparse
 import shutil
+import threading
 import wave
 import zipfile
 import tempfile
 from pathlib import Path
 from faster_whisper import WhisperModel
+
+_RESOLVER_TIMEOUT_SECONDS = 120
+
+
+def _run_with_timeout(fn, arg, timeout_seconds):
+    """Run fn(arg) in its own daemon thread; give up (leaving the thread orphaned) after timeout_seconds."""
+    result = {}
+
+    def target():
+        try:
+            result['value'] = fn(arg)
+        except Exception as e:
+            result['error'] = e
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+    if thread.is_alive():
+        raise TimeoutError(f'travou por mais de {timeout_seconds}s')
+    if 'error' in result:
+        raise result['error']
+    return result['value']
 
 from lib.whatsapp_export import parse_export, synthetic_message_id
 from lib.db import insert_message, message_similar_exists, message_exists
@@ -74,9 +97,9 @@ def _resolve_body(msg, export_dir, resolve_fns):
     media_path = export_dir / msg['media_ref']
     if media_type in resolve_fns and media_path.exists():
         try:
-            return resolve_fns[media_type](media_path)
+            return _run_with_timeout(resolve_fns[media_type], media_path, _RESOLVER_TIMEOUT_SECONDS)
         except Exception as e:
-            print(f"  aviso: falha ao processar {msg['media_ref']} ({e}); usando placeholder.")
+            print(f"  aviso: falha ao processar {msg['media_ref']} ({e}); usando placeholder e seguindo em frente.")
             return f'[arquivo: {msg["media_ref"]}]'
 
     return f'[arquivo: {msg["media_ref"]}]'
