@@ -24,9 +24,19 @@ CREATE TABLE IF NOT EXISTS activities (
   FOREIGN KEY (source_message_id) REFERENCES messages(id)
 );
 
+CREATE TABLE IF NOT EXISTS llm_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL,
+  model TEXT NOT NULL,
+  prompt_tokens INTEGER NOT NULL,
+  completion_tokens INTEGER NOT NULL,
+  messages_in_batch INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_processed ON messages(processed);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_group_label ON messages(group_label);
 CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
 CREATE INDEX IF NOT EXISTS idx_activities_due_date ON activities(due_date);
 CREATE INDEX IF NOT EXISTS idx_activities_source_message_id ON activities(source_message_id);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);

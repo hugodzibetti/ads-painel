@@ -180,6 +180,40 @@ def test_run_extraction_marks_processed_despite_bad_timestamp():
     os.unlink(db_path)
 
 
+def test_run_extraction_persists_llm_usage():
+    """Each successful API call must record a row in llm_usage for the Status page's cost tracking."""
+    db_path = create_test_db()
+    os.environ['DB_PATH'] = db_path
+    os.environ['OPENCODE_API_KEY'] = 'test-key'
+    os.environ['OPENCODE_MODEL'] = 'deepseek-v4-flash'
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?)",
+        ('msg1', 'alunos', 'João', 'Prova de redes amanhã', datetime.now(timezone.utc).isoformat(), 0)
+    )
+    conn.commit()
+    conn.close()
+
+    mock_response = make_mock_openai_response([])
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
+    with patch('lib.extraction.OpenAI', return_value=mock_client):
+        run_extraction(max_batches=1)
+
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT model, prompt_tokens, completion_tokens, messages_in_batch FROM llm_usage"
+    ).fetchall()
+    conn.close()
+
+    assert len(rows) == 1
+    assert rows[0] == ('deepseek-v4-flash', 10, 5, 1)
+
+    os.unlink(db_path)
+
+
 if __name__ == '__main__':
     test_normalize_title()
     print("✓ test_normalize_title")
@@ -207,5 +241,8 @@ if __name__ == '__main__':
 
     test_run_extraction_marks_processed_despite_bad_timestamp()
     print("✓ test_run_extraction_marks_processed_despite_bad_timestamp")
+
+    test_run_extraction_persists_llm_usage()
+    print("✓ test_run_extraction_persists_llm_usage")
 
     print("\nAll tests passed!")
