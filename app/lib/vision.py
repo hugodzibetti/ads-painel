@@ -23,28 +23,38 @@ def init_vision_client():
     return OpenAI(api_key=api_key, base_url=base_url, timeout=60.0, max_retries=1), model
 
 
-def caption_image(client, model, image_bytes, filename):
-    """Ask a vision-capable model for a short caption focused on academic deadlines."""
+def caption_image(client, model, image_bytes, filename, max_attempts=3):
+    """Ask a vision-capable model for a short caption focused on academic deadlines.
+
+    kimi-k2.7-code (the default Go-plan vision model) empirically returns an empty
+    completion for a meaningful fraction of requests with no error — retries a few
+    times before giving up, since a fresh attempt usually succeeds.
+    """
     mime = _MIME_BY_EXT.get(Path(filename).suffix.lower(), 'image/jpeg')
     b64 = base64.b64encode(image_bytes).decode('ascii')
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "Descreva objetivamente esta imagem em até 2 frases, focando em datas, "
-                        "prazos e avisos acadêmicos, se houver. Se for irrelevante (ex: meme, foto "
-                        "pessoal), diga apenas 'imagem sem conteúdo acadêmico relevante'."
-                    ),
-                },
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-            ],
-        }],
-        max_tokens=150,
-    )
-    content = response.choices[0].message.content.strip()
-    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-    return content
+
+    for attempt in range(1, max_attempts + 1):
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Descreva objetivamente esta imagem em até 2 frases, focando em datas, "
+                            "prazos e avisos acadêmicos, se houver. Se for irrelevante (ex: meme, foto "
+                            "pessoal), diga apenas 'imagem sem conteúdo acadêmico relevante'."
+                        ),
+                    },
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                ],
+            }],
+            max_tokens=150,
+        )
+        content = (response.choices[0].message.content or '').strip()
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+        if content:
+            return content
+
+    raise RuntimeError(f'modelo de visão retornou conteúdo vazio após {max_attempts} tentativas')

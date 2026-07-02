@@ -2,11 +2,20 @@ import argparse
 import shutil
 import signal
 import socket
+import subprocess
+import sys
 import wave
 import zipfile
 import tempfile
 from pathlib import Path
 from faster_whisper import WhisperModel
+
+from lib.whatsapp_export import parse_export, synthetic_message_id
+from lib.db import insert_message, message_similar_exists, message_exists
+from lib.media_resolve import classify_media
+from lib.vision import init_vision_client
+from lib.media_resolve import resolve_pdf, resolve_image, resolve_audio, resolve_video, pick_whisper_device
+from lib.extraction import run_extraction
 
 socket.setdefaulttimeout(90)
 
@@ -36,13 +45,6 @@ def _run_with_timeout(fn, arg, timeout_seconds):
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous_handler)
-
-from lib.whatsapp_export import parse_export, synthetic_message_id
-from lib.db import insert_message, message_similar_exists, message_exists
-from lib.media_resolve import classify_media
-from lib.vision import init_vision_client, caption_image
-from lib.media_resolve import resolve_pdf, resolve_image, resolve_audio, resolve_video, pick_whisper_device
-from lib.extraction import run_extraction
 
 
 def find_export_txt(export_dir):
@@ -113,10 +115,36 @@ def _resolve_body(msg, export_dir, resolve_fns):
     return f'[arquivo: {msg["media_ref"]}]'
 
 
-def build_resolve_fns(vision_client, vision_model, whisper_model):
+def caption_bytes_via_subprocess(image_bytes, filename, timeout_seconds=60):
+    """Run the vision API call in a throwaway subprocess so a hung network read can be
+    guaranteed-killed by subprocess.run's own timeout, regardless of what it's stuck on.
+
+    A live run showed a blocking SSL read that neither thread.join(timeout=...) nor
+    SIGALRM nor socket.setdefaulttimeout() could bound — py-spy kept showing the read
+    syscall itself never returning. A genuinely separate OS process can always be
+    SIGKILLed by the parent no matter what the child is doing internally.
+    """
+    suffix = Path(filename).suffix or '.jpg'
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(image_bytes)
+        tmp_path = tmp.name
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'scripts._caption_worker', tmp_path],
+            capture_output=True, text=True, timeout=timeout_seconds,
+            cwd=Path(__file__).resolve().parent.parent,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f'caption worker falhou: {result.stderr.strip()[:300]}')
+        return result.stdout.strip()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+def build_resolve_fns(whisper_model):
     """Wire the real per-media-type resolvers used outside of tests."""
     def caption_bytes(image_bytes, filename):
-        return caption_image(vision_client, vision_model, image_bytes, filename)
+        return caption_bytes_via_subprocess(image_bytes, filename)
 
     return {
         'pdf': lambda path: resolve_pdf(path, caption_bytes),
@@ -150,12 +178,12 @@ def main(argv=None):
     parser.add_argument('profs_export', help='Caminho do .zip ou diretório extraído do grupo profs')
     args = parser.parse_args(argv)
 
-    vision_client, vision_model = init_vision_client()
+    init_vision_client()  # fail fast if OPENCODE_API_KEY is missing, before processing anything
     device, compute_type = pick_whisper_device()
     whisper_model = WhisperModel('large-v3', device=device, compute_type=compute_type)
     if device == 'cuda' and not _whisper_gpu_usable(whisper_model):
         whisper_model = WhisperModel('large-v3', device='cpu', compute_type='int8')
-    resolve_fns = build_resolve_fns(vision_client, vision_model, whisper_model)
+    resolve_fns = build_resolve_fns(whisper_model)
 
     for path, group_label in [(args.alunos_export, 'alunos'), (args.profs_export, 'profs')]:
         original_path = Path(path)

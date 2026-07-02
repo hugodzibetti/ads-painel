@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.import_export import find_export_txt, extract_if_zip, process_group, _run_with_timeout
+from scripts.import_export import find_export_txt, extract_if_zip, process_group, _run_with_timeout, caption_bytes_via_subprocess
 
 
 def create_test_db():
@@ -165,6 +165,31 @@ def test_run_with_timeout_raises_when_function_hangs():
         assert 'travou' in str(e)
     elapsed = time.time() - start
     assert elapsed < 3, f"should give up around the 1s timeout, took {elapsed}s"
+
+
+def test_caption_bytes_via_subprocess_returns_stripped_stdout():
+    fake_result = MagicMock(returncode=0, stdout='  Edital de prova N3  \n', stderr='')
+    with patch('scripts.import_export.subprocess.run', return_value=fake_result) as mock_run:
+        result = caption_bytes_via_subprocess(b'fake-image-bytes', 'foto.jpg')
+
+    assert result == 'Edital de prova N3'
+    call_args = mock_run.call_args
+    assert call_args.kwargs['timeout'] == 60
+    cmd = call_args.args[0]
+    assert cmd[1:3] == ['-m', 'scripts._caption_worker']
+    # the temp file path passed to the worker should have been cleaned up afterwards
+    tmp_path = Path(cmd[3])
+    assert not tmp_path.exists()
+
+
+def test_caption_bytes_via_subprocess_raises_on_worker_failure():
+    fake_result = MagicMock(returncode=1, stdout='', stderr='CreditsError: sem saldo')
+    with patch('scripts.import_export.subprocess.run', return_value=fake_result):
+        try:
+            caption_bytes_via_subprocess(b'fake-image-bytes', 'foto.jpg')
+            assert False, "should have raised"
+        except RuntimeError as e:
+            assert 'CreditsError' in str(e)
 
 
 def test_process_group_resolver_failure_falls_back_to_placeholder():
