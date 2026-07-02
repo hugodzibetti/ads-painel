@@ -3,8 +3,10 @@ from datetime import datetime, timedelta
 import pytz
 from lib.extraction import run_extraction
 from lib.db import fetch_activities, update_activity_status
+from lib.theme import get_urgency, urgency_badge_html, inject_css
 
 st.set_page_config(page_title="Painel", layout="wide")
+inject_css()
 
 st.title("Atividades")
 
@@ -12,9 +14,18 @@ col1, col2 = st.columns([4, 1])
 with col1:
     st.markdown("Revise e atualize o status das atividades extraídas das mensagens do WhatsApp.")
 with col2:
-    if st.button("🔄 Atualizar", use_container_width=True, key="update_btn"):
-        with st.spinner("Processando mensagens..."):
-            result = run_extraction(max_batches=10)
+    if st.button(
+        "🔄 Atualizar",
+        use_container_width=True,
+        key="update_btn",
+        disabled=st.session_state.get("extraction_running", False),
+    ):
+        st.session_state["extraction_running"] = True
+        try:
+            with st.spinner("Processando mensagens..."):
+                result = run_extraction(max_batches=10)
+        finally:
+            st.session_state["extraction_running"] = False
 
         if result["errors"]:
             st.error("Erros durante extração:")
@@ -33,29 +44,12 @@ with col2:
         with result_cols[3]:
             st.metric("Na Fila", result['messages_remaining'])
 
-st.markdown("---")
+st.divider()
 
 tz = pytz.timezone('America/Sao_Paulo')
 now = datetime.now(tz)
 
-def get_urgency_color(due_date_str, confidence):
-    try:
-        due_date = datetime.fromisoformat(due_date_str).date()
-        today = now.date()
-        days_until = (due_date - today).days
-        if days_until < 0:
-            return "🔴"
-        elif days_until == 0:
-            return "🟠"
-        elif days_until <= 3:
-            return "🟡"
-        else:
-            return "🟢"
-    except (ValueError, AttributeError, TypeError):
-        return "⚪"
-
 def render_activity_card(activity):
-    urgency = get_urgency_color(activity['due_date'], activity['confidence'])
     with st.container(border=True):
         header_col1, header_col2 = st.columns([3, 1], gap="small")
         with header_col1:
@@ -67,17 +61,19 @@ def render_activity_card(activity):
         if activity['description']:
             st.markdown(activity['description'], unsafe_allow_html=False)
 
-        meta_col1, meta_col2, meta_col3 = st.columns(3, gap="small")
+        meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4, gap="small")
         with meta_col1:
             st.caption(f"📅 Prazo: **{activity['due_date']}**")
         with meta_col2:
             st.caption(f"👤 {activity['author']}")
         with meta_col3:
             st.caption(f"💬 {activity['group_label']}")
+        with meta_col4:
+            st.markdown(urgency_badge_html(activity['due_date']), unsafe_allow_html=True)
 
         action_col1, action_col2, action_col3 = st.columns([1, 1, 2], gap="small")
         with action_col1:
-            if st.button("Concluir", key=f"conclude_{activity['id']}", use_container_width=True):
+            if st.button("Concluir", key=f"conclude_{activity['id']}", use_container_width=True, type="primary"):
                 update_activity_status(activity['id'], 'concluido')
                 st.success("Concluída!")
                 st.rerun()
@@ -89,34 +85,23 @@ def render_activity_card(activity):
         with action_col3:
             st.caption(f"ID da mensagem: {activity['source_message_id']}")
 
+def render_activity_tab(status, empty_message):
+    activities = fetch_activities(status=status)
+    if not activities:
+        st.info(empty_message)
+    else:
+        st.markdown(f"{len(activities)} atividade(s)")
+        st.divider()
+        for activity in activities:
+            render_activity_card(activity)
+
 tab1, tab2, tab3 = st.tabs(["📋 Pendentes", "✅ Concluídas", "🗑️ Descartadas"])
 
 with tab1:
-    activities = fetch_activities(status='pendente')
-    if not activities:
-        st.info("Nenhuma atividade pendente.")
-    else:
-        st.markdown(f"{len(activities)} atividade(s)")
-        st.divider()
-        for activity in activities:
-            render_activity_card(activity)
+    render_activity_tab('pendente', "Nenhuma atividade pendente.")
 
 with tab2:
-    activities = fetch_activities(status='concluido')
-    if not activities:
-        st.info("Nenhuma atividade concluída.")
-    else:
-        st.markdown(f"{len(activities)} atividade(s)")
-        st.divider()
-        for activity in activities:
-            render_activity_card(activity)
+    render_activity_tab('concluido', "Nenhuma atividade concluída.")
 
 with tab3:
-    activities = fetch_activities(status='descartado')
-    if not activities:
-        st.info("Nenhuma atividade descartada.")
-    else:
-        st.markdown(f"{len(activities)} atividade(s)")
-        st.divider()
-        for activity in activities:
-            render_activity_card(activity)
+    render_activity_tab('descartado', "Nenhuma atividade descartada.")
