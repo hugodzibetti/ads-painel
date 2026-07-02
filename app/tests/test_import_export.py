@@ -3,8 +3,10 @@ import os
 import sqlite3
 import tempfile
 import zipfile
+import json
 from pathlib import Path
 from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -187,5 +189,43 @@ def test_process_group_skips_message_similar_to_live_capture():
     result = process_group(export_dir, 'alunos', resolve_fns={})
 
     assert result == {'inserted': 0, 'skipped_dup': 1, 'total': 1}
+
+    os.unlink(db_path)
+
+
+def test_main_imports_both_groups_and_drains_extraction():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+    os.environ['OPENCODE_API_KEY'] = 'test-key'
+
+    alunos_dir = Path(tempfile.mkdtemp())
+    (alunos_dir / 'export.txt').write_text("01/07/2026 10:15 - Maria: Prova de redes dia 10/07")
+
+    profs_dir = Path(tempfile.mkdtemp())
+    (profs_dir / 'export.txt').write_text("01/07/2026 11:00 - Prof David: Edital publicado")
+
+    mock_extraction_response = MagicMock()
+    mock_extraction_response.usage.prompt_tokens = 10
+    mock_extraction_response.usage.completion_tokens = 5
+    mock_extraction_response.choices = [MagicMock()]
+    mock_extraction_response.choices[0].message.content = json.dumps({"items": []})
+
+    mock_extraction_client = MagicMock()
+    mock_extraction_client.chat.completions.create.return_value = mock_extraction_response
+
+    with patch('lib.extraction.OpenAI', return_value=mock_extraction_client), \
+         patch('scripts.import_export.init_vision_client', return_value=(MagicMock(), 'claude-haiku-4-5')), \
+         patch('scripts.import_export.WhisperModel', return_value=MagicMock()):
+        from scripts.import_export import main
+        main([str(alunos_dir), str(profs_dir)])
+
+    conn = sqlite3.connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+    remaining = conn.execute("SELECT COUNT(*) FROM messages WHERE processed = 0").fetchone()[0]
+    conn.close()
+
+    assert count == 2
+    assert remaining == 0
 
     os.unlink(db_path)

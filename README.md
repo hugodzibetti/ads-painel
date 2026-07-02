@@ -99,6 +99,21 @@ A aplicação abrirá em `http://localhost:8501`.
    - Cards coloridos indicam urgência (🟢 verde = longe, 🔴 vermelho = atrasado)
 5. **Histórico**: abra a página Mensagens para pesquisar e visualizar o feed completo
 
+## Import retroativo (histórico completo com mídia)
+
+Para popular o banco com o histórico completo de um grupo (não só mensagens novas), exporte a conversa no WhatsApp com mídia incluída (Configurações do grupo → Exportar conversa → Incluir mídia) e rode:
+
+```bash
+cd app && source venv/bin/activate
+python scripts/import_export.py "/caminho/para/Conversa do WhatsApp com ADS.zip" "/caminho/para/Conversa do WhatsApp com 1° ADS Fasipe Sorriso.zip"
+```
+
+Primeiro argumento é sempre o export do grupo **alunos**, segundo é sempre **profs**. O script nunca copia os `.zip`/mídia para dentro do repositório — extrai para uma pasta temporária do sistema, processa, e descarta.
+
+Processamento por tipo de mídia (pensado pra ficar barato): texto e PDF (extração local, de graça) são processados sempre; imagens usam Claude Haiku via `OPENCODE_VISION_BASE_URL`/`OPENCODE_VISION_MODEL` (endpoint pago por token, fora do plano Go — configure essas duas variáveis no `.env` antes de rodar); áudio e vídeo são transcritos localmente via `faster-whisper` (`large-v3`, usa GPU se disponível — sem custo de API); figurinhas são ignoradas.
+
+Requer `ffmpeg` instalado no sistema para processar vídeos (`apt install ffmpeg`).
+
 ## Estrutura de arquivos
 
 ```
