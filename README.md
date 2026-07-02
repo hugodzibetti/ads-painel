@@ -105,7 +105,7 @@ Para popular o banco com o histórico completo de um grupo (não só mensagens n
 
 ```bash
 cd app && source venv/bin/activate
-python scripts/import_export.py "/caminho/para/Conversa do WhatsApp com ADS.zip" "/caminho/para/Conversa do WhatsApp com 1° ADS Fasipe Sorriso.zip"
+python -m scripts.import_export "/caminho/para/Conversa do WhatsApp com ADS.zip" "/caminho/para/Conversa do WhatsApp com 1° ADS Fasipe Sorriso.zip"
 ```
 
 Primeiro argumento é sempre o export do grupo **alunos**, segundo é sempre **profs**. O script nunca copia os `.zip`/mídia para dentro do repositório — extrai para uma pasta temporária do sistema, processa, e descarta.
