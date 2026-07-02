@@ -114,6 +114,8 @@ Processamento por tipo de mídia (pensado pra ficar barato): texto e PDF (extra�
 
 Requer `ffmpeg` instalado no sistema para processar vídeos (`apt install ffmpeg`).
 
+Rodar `large-v3` só em CPU é bem lento para exports grandes — recomenda-se GPU se você tiver histórico volumoso pra importar.
+
 ## Estrutura de arquivos
 
 ```
@@ -200,23 +202,6 @@ A biblioteca `whatsapp-web.js` usa automação do navegador (Chromium) para cone
 - Integração com calendário / agenda
 
 ## Fases futuras
-
-### Extração multimodal
-
-Processar imagens e áudios anexados às mensagens para extrair prazos em:
-- Screenshots de cronogramas
-- Fotos de quadro/aviso
-- Áudio/PTT de avisos informais
-
-Exigiria: download de mídia no bot, chamada LLM com visão/transcrição, armazenamento de referência aos arquivos.
-
-### Importação retroativa com histórico
-
-Usar os exports completos (`.txt` + mídia) que você já tem dos dois grupos para popular o banco com histórico passado:
-- Script de import único (fora do bot ao vivo) que lê exports + mídia
-- Extração multimodal sobre histórico completo
-- Dedup entre import retroativo e captura ao vivo
-- Resultado: base estruturada com todo o histórico da turma disponível para consulta e análise
 
 ### Resumos e pesquisa
 
