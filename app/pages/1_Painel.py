@@ -1,9 +1,7 @@
 import streamlit as st
-from datetime import datetime, timedelta
-import pytz
 from lib.extraction import run_extraction
 from lib.db import fetch_activities, update_activity_status
-from lib.theme import get_urgency, urgency_badge_html, inject_css
+from lib.theme import urgency_badge_html, inject_css
 
 st.set_page_config(page_title="Painel", layout="wide")
 inject_css()
@@ -45,9 +43,6 @@ with col2:
             st.metric("Na Fila", result['messages_remaining'])
 
 st.divider()
-
-tz = pytz.timezone('America/Sao_Paulo')
-now = datetime.now(tz)
 
 def render_activity_card(activity):
     with st.container(border=True):
