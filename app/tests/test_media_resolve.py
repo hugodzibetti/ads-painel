@@ -2,6 +2,7 @@ import sys
 import tempfile
 import os
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -12,6 +13,10 @@ from lib.media_resolve import (
     render_pdf_first_page,
     resolve_pdf,
     resolve_image,
+    pick_whisper_device,
+    resolve_audio,
+    extract_audio_track,
+    resolve_video,
 )
 
 
@@ -96,3 +101,47 @@ def test_resolve_image_calls_caption_fn_with_bytes_and_filename():
         assert captured['filename'] == Path(path).name
     finally:
         os.unlink(path)
+
+
+def make_fake_segment(text):
+    seg = MagicMock()
+    seg.text = text
+    return seg
+
+
+def test_resolve_audio_joins_segment_text():
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = ([make_fake_segment(' Prova amanhã '), make_fake_segment('às oito')], None)
+
+    result = resolve_audio('/fake/path/audio.opus', fake_model)
+
+    assert result == 'Prova amanhã  às oito'
+    fake_model.transcribe.assert_called_once_with('/fake/path/audio.opus')
+
+
+def test_extract_audio_track_raises_clear_error_without_ffmpeg():
+    with patch('lib.media_resolve.shutil.which', return_value=None):
+        try:
+            extract_audio_track('/fake/video.mp4', '/fake/out.wav')
+            assert False, "should have raised"
+        except RuntimeError as e:
+            assert 'ffmpeg' in str(e)
+
+
+def test_resolve_video_extracts_audio_then_transcribes():
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = ([make_fake_segment('conteudo do video')], None)
+
+    with patch('lib.media_resolve.extract_audio_track') as mock_extract:
+        result = resolve_video('/fake/video.mp4', fake_model)
+
+    assert result == 'conteudo do video'
+    mock_extract.assert_called_once()
+    fake_model.transcribe.assert_called_once()
+
+
+def test_pick_whisper_device_falls_back_to_cpu_without_cuda():
+    with patch.dict('sys.modules', {'ctranslate2': None}):
+        device, compute_type = pick_whisper_device()
+    assert device == 'cpu'
+    assert compute_type == 'int8'
