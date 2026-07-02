@@ -159,12 +159,12 @@ def test_run_with_timeout_raises_when_function_hangs():
 
     start = time.time()
     try:
-        _run_with_timeout(hangs, None, timeout_seconds=0.2)
+        _run_with_timeout(hangs, None, timeout_seconds=1)
         assert False, "should have raised"
     except TimeoutError as e:
         assert 'travou' in str(e)
     elapsed = time.time() - start
-    assert elapsed < 1, f"should give up around the 0.2s timeout, took {elapsed}s"
+    assert elapsed < 3, f"should give up around the 1s timeout, took {elapsed}s"
 
 
 def test_process_group_resolver_failure_falls_back_to_placeholder():

@@ -1,6 +1,6 @@
 import argparse
 import shutil
-import threading
+import signal
 import wave
 import zipfile
 import tempfile
@@ -10,24 +10,29 @@ from faster_whisper import WhisperModel
 _RESOLVER_TIMEOUT_SECONDS = 45
 
 
+class _ResolverTimeout(TimeoutError):
+    pass
+
+
 def _run_with_timeout(fn, arg, timeout_seconds):
-    """Run fn(arg) in its own daemon thread; give up (leaving the thread orphaned) after timeout_seconds."""
-    result = {}
+    """Run fn(arg) with a hard wall-clock timeout via SIGALRM.
 
-    def target():
-        try:
-            result['value'] = fn(arg)
-        except Exception as e:
-            result['error'] = e
+    A background-thread + thread.join(timeout=...) approach was tried first, but some
+    blocking SSL reads observed in production held the GIL for their entire syscall,
+    so the main thread never got scheduled again to notice its join() had timed out.
+    SIGALRM interrupts the blocking syscall itself at the OS level, independent of the
+    GIL — it only works because this is always called from the main thread.
+    """
+    def _on_alarm(signum, frame):
+        raise _ResolverTimeout(f'travou por mais de {timeout_seconds}s')
 
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
-    thread.join(timeout=timeout_seconds)
-    if thread.is_alive():
-        raise TimeoutError(f'travou por mais de {timeout_seconds}s')
-    if 'error' in result:
-        raise result['error']
-    return result['value']
+    previous_handler = signal.signal(signal.SIGALRM, _on_alarm)
+    signal.alarm(timeout_seconds)
+    try:
+        return fn(arg)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 from lib.whatsapp_export import parse_export, synthetic_message_id
 from lib.db import insert_message, message_similar_exists, message_exists
