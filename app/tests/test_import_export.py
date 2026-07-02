@@ -146,6 +146,31 @@ def test_process_group_pdf_uses_resolver():
     os.unlink(db_path)
 
 
+def test_process_group_resolver_failure_falls_back_to_placeholder():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+
+    export_dir = Path(tempfile.mkdtemp())
+    (export_dir / 'export.txt').write_text(
+        "01/07/2026 10:15 - Maria: ‎FOTO.jpg (arquivo anexado)"
+    )
+    (export_dir / 'FOTO.jpg').write_bytes(b'fake-jpg')
+
+    def flaky_resolver(path):
+        raise TimeoutError('conexão travou')
+
+    result = process_group(export_dir, 'alunos', resolve_fns={'image': flaky_resolver})
+
+    assert result['inserted'] == 1
+    conn = sqlite3.connect(db_path)
+    body = conn.execute("SELECT body FROM messages").fetchone()[0]
+    conn.close()
+    assert body == '[arquivo: FOTO.jpg]'
+
+    os.unlink(db_path)
+
+
 def test_process_group_reimport_does_not_duplicate_on_nondeterministic_caption():
     db_path = create_test_db()
     init_test_schema(db_path)

@@ -20,7 +20,7 @@ def init_vision_client():
     if not api_key:
         raise ValueError("OPENCODE_API_KEY is not set")
 
-    return OpenAI(api_key=api_key, base_url=base_url), model
+    return OpenAI(api_key=api_key, base_url=base_url, timeout=60.0, max_retries=1), model
 
 
 def caption_image(client, model, image_bytes, filename):

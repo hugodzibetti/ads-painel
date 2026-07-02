@@ -73,7 +73,11 @@ def _resolve_body(msg, export_dir, resolve_fns):
 
     media_path = export_dir / msg['media_ref']
     if media_type in resolve_fns and media_path.exists():
-        return resolve_fns[media_type](media_path)
+        try:
+            return resolve_fns[media_type](media_path)
+        except Exception as e:
+            print(f"  aviso: falha ao processar {msg['media_ref']} ({e}); usando placeholder.")
+            return f'[arquivo: {msg["media_ref"]}]'
 
     return f'[arquivo: {msg["media_ref"]}]'
 
