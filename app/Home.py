@@ -1,12 +1,14 @@
 import streamlit as st
 from lib.db import fetch_unprocessed_count, fetch_activities
+from lib.theme import inject_css
 
 st.set_page_config(page_title="ads-painel", layout="wide")
+inject_css()
 
 st.title("ads-painel")
 st.markdown("Acompanhe prazos da turma de ADS extraídos automaticamente das mensagens do WhatsApp.")
 
-st.markdown("---")
+st.divider()
 
 col1, col2, col3 = st.columns(3)
 
@@ -22,10 +24,11 @@ with col3:
     all_activities = fetch_activities()
     st.metric("Total de Atividades", len(all_activities))
 
-st.markdown("---")
+st.divider()
 
-st.subheader("Fluxo de Uso")
-st.markdown("""
+with st.container(border=True):
+    st.subheader("Fluxo de Uso")
+    st.markdown("""
 1. O bot captura mensagens dos grupos de WhatsApp
 2. Clique em **"Atualizar"** no Painel para extrair atividades (prazos, provas, trabalhos)
 3. Revise cada atividade: marque como concluída ou descarte as incorretas
