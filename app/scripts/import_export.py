@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from faster_whisper import WhisperModel
 
-_RESOLVER_TIMEOUT_SECONDS = 120
+_RESOLVER_TIMEOUT_SECONDS = 45
 
 
 def _run_with_timeout(fn, arg, timeout_seconds):
