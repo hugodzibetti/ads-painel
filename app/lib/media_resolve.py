@@ -77,10 +77,12 @@ def extract_audio_track(video_path, output_wav_path):
         raise RuntimeError(
             'ffmpeg não encontrado no PATH — instale com "apt install ffmpeg" antes de importar vídeos.'
         )
-    subprocess.run(
+    result = subprocess.run(
         ['ffmpeg', '-y', '-i', str(video_path), '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', str(output_wav_path)],
-        check=True, capture_output=True,
+        capture_output=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f'ffmpeg falhou ao extrair áudio de {video_path}: {result.stderr.decode(errors="replace")}')
 
 
 def resolve_video(path, whisper_model):
