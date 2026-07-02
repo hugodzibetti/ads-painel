@@ -1,5 +1,6 @@
 import argparse
 import shutil
+import wave
 import zipfile
 import tempfile
 from pathlib import Path
@@ -90,6 +91,24 @@ def build_resolve_fns(vision_client, vision_model, whisper_model):
     }
 
 
+def _whisper_gpu_usable(whisper_model):
+    """Run a trivial transcription to confirm the GPU runtime libraries actually load, not just that a GPU exists."""
+    with tempfile.TemporaryDirectory() as tmp:
+        wav_path = Path(tmp) / 'silence.wav'
+        with wave.open(str(wav_path), 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            wav_file.writeframes(b'\x00\x00' * 1600)
+        try:
+            segments, _info = whisper_model.transcribe(str(wav_path))
+            next(iter(segments), None)
+            return True
+        except Exception as e:
+            print(f"GPU indisponível para faster-whisper ({e}); caindo para CPU.")
+            return False
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Import retroativo dos exports do WhatsApp (alunos e profs)')
     parser.add_argument('alunos_export', help='Caminho do .zip ou diretório extraído do grupo alunos')
@@ -99,6 +118,8 @@ def main(argv=None):
     vision_client, vision_model = init_vision_client()
     device, compute_type = pick_whisper_device()
     whisper_model = WhisperModel('large-v3', device=device, compute_type=compute_type)
+    if device == 'cuda' and not _whisper_gpu_usable(whisper_model):
+        whisper_model = WhisperModel('large-v3', device='cpu', compute_type='int8')
     resolve_fns = build_resolve_fns(vision_client, vision_model, whisper_model)
 
     for path, group_label in [(args.alunos_export, 'alunos'), (args.profs_export, 'profs')]:
