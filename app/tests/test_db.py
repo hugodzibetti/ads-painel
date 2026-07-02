@@ -17,6 +17,8 @@ from lib.db import (
     update_activity_status,
     check_duplicate_activity,
     fetch_messages,
+    insert_message,
+    message_similar_exists,
 )
 from lib.text import normalize_title
 
@@ -249,6 +251,64 @@ def test_fetch_messages_with_search():
     os.unlink(db_path)
 
 
+def test_insert_message_creates_row():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+
+    insert_message('import:abc123', 'alunos', 'Maria', 'texto da mensagem', datetime.now(timezone.utc).isoformat())
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT wa_message_id, group_label, author, body, processed FROM messages").fetchone()
+    conn.close()
+
+    assert row[0] == 'import:abc123'
+    assert row[1] == 'alunos'
+    assert row[2] == 'Maria'
+    assert row[3] == 'texto da mensagem'
+    assert row[4] == 0
+
+    os.unlink(db_path)
+
+
+def test_insert_message_swallows_duplicate():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+
+    ts = datetime.now(timezone.utc).isoformat()
+    insert_message('import:dup', 'alunos', 'Maria', 'primeira', ts)
+    insert_message('import:dup', 'alunos', 'Maria', 'primeira', ts)  # must not raise
+
+    conn = sqlite3.connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM messages WHERE wa_message_id = 'import:dup'").fetchone()[0]
+    conn.close()
+
+    assert count == 1
+
+    os.unlink(db_path)
+
+
+def test_message_similar_exists_matches_same_minute():
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    os.environ['DB_PATH'] = db_path
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?)",
+        ('live-msg-1', 'alunos', 'Maria', 'Prova amanhã', '2026-06-30T22:49:00.000Z', 0)
+    )
+    conn.commit()
+    conn.close()
+
+    assert message_similar_exists('alunos', 'Maria', '2026-06-30T22:49:45+00:00', 'Prova amanhã') is True
+    assert message_similar_exists('alunos', 'Maria', '2026-06-30T22:49:45+00:00', 'Corpo diferente') is False
+    assert message_similar_exists('alunos', 'Maria', '2026-06-30T22:55:00+00:00', 'Prova amanhã') is False
+
+    os.unlink(db_path)
+
+
 if __name__ == '__main__':
     test_fetch_unprocessed_count()
     print("✓ test_fetch_unprocessed_count")
@@ -270,5 +330,14 @@ if __name__ == '__main__':
 
     test_fetch_messages_with_search()
     print("✓ test_fetch_messages_with_search")
+
+    test_insert_message_creates_row()
+    print("✓ test_insert_message_creates_row")
+
+    test_insert_message_swallows_duplicate()
+    print("✓ test_insert_message_swallows_duplicate")
+
+    test_message_similar_exists_matches_same_minute()
+    print("✓ test_message_similar_exists_matches_same_minute")
 
     print("\nAll tests passed!")

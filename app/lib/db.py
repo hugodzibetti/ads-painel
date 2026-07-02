@@ -1,9 +1,12 @@
 import sqlite3
 import os
+import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from lib.text import normalize_title
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parents[2] / '.env')
 
@@ -193,5 +196,40 @@ def fetch_messages(limit=200, offset=0, search_query=None):
         cursor = conn.execute(query, params)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+def insert_message(wa_message_id, group_label, author, body, timestamp):
+    """Insert a raw message, mirroring bot/db.js::insertMessage's swallow-on-duplicate semantics."""
+    conn = get_connection()
+    try:
+        try:
+            conn.execute(
+                """
+                INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed)
+                VALUES (?, ?, ?, ?, ?, 0)
+                """,
+                (wa_message_id, group_label, author, body, timestamp)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            logger.info(f"Message {wa_message_id} already exists, skipping.")
+    finally:
+        conn.close()
+
+def message_similar_exists(group_label, author, timestamp, body):
+    """Check for an existing message with the same group/author/body in the same minute."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            SELECT 1 FROM messages
+            WHERE group_label = ? AND author = ? AND body = ?
+              AND substr(timestamp, 1, 16) = substr(?, 1, 16)
+            LIMIT 1
+            """,
+            (group_label, author, body, timestamp)
+        )
+        return cursor.fetchone() is not None
     finally:
         conn.close()
