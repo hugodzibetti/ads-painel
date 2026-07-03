@@ -217,6 +217,23 @@ def fetch_messages(limit=200, offset=0, search_query=None):
     finally:
         conn.close()
 
+def fetch_messages_count(search_query=None):
+    """Count messages with optional search, mirroring fetch_messages' WHERE clause."""
+    conn = get_connection()
+    try:
+        if search_query:
+            query = "SELECT COUNT(*) as count FROM messages WHERE author LIKE ? OR body LIKE ?"
+            params = (f'%{search_query}%', f'%{search_query}%')
+        else:
+            query = "SELECT COUNT(*) as count FROM messages"
+            params = ()
+
+        cursor = conn.execute(query, params)
+        row = cursor.fetchone()
+        return row['count']
+    finally:
+        conn.close()
+
 def insert_message(wa_message_id, group_label, author, body, timestamp):
     """Insert a raw message, mirroring bot/db.js::insertMessage's swallow-on-duplicate semantics."""
     conn = get_connection()
@@ -258,5 +275,80 @@ def message_similar_exists(group_label, author, timestamp, body):
             (group_label, author, body, timestamp)
         )
         return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+def insert_llm_usage(model, prompt_tokens, completion_tokens, messages_in_batch):
+    """Record token usage for a single LLM call, for the Status page's cost tracking."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO llm_usage (timestamp, model, prompt_tokens, completion_tokens, messages_in_batch)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (datetime.now(timezone.utc).isoformat(), model, prompt_tokens, completion_tokens, messages_in_batch)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def fetch_usage_summary(since=None):
+    """Aggregate llm_usage totals, optionally restricted to timestamp >= since (ISO string).
+
+    Returns a dict with prompt_tokens, completion_tokens, run_count, last_run_at (None if no rows).
+    """
+    conn = get_connection()
+    try:
+        if since:
+            cursor = conn.execute(
+                """
+                SELECT COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+                       COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+                       COUNT(*) as run_count,
+                       MAX(timestamp) as last_run_at
+                FROM llm_usage
+                WHERE timestamp >= ?
+                """,
+                (since,)
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+                       COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+                       COUNT(*) as run_count,
+                       MAX(timestamp) as last_run_at
+                FROM llm_usage
+                """
+            )
+        return dict(cursor.fetchone())
+    finally:
+        conn.close()
+
+def fetch_activity_status_counts():
+    """Count activities grouped by status. Missing statuses are omitted (caller defaults to 0)."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute("SELECT status, COUNT(*) as count FROM activities GROUP BY status")
+        return {row['status']: row['count'] for row in cursor.fetchall()}
+    finally:
+        conn.close()
+
+def fetch_activity_type_counts():
+    """Count activities grouped by type. Missing types are omitted (caller defaults to 0)."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute("SELECT type, COUNT(*) as count FROM activities GROUP BY type")
+        return {row['type']: row['count'] for row in cursor.fetchall()}
+    finally:
+        conn.close()
+
+def fetch_message_stats():
+    """Returns a dict with total message count and the earliest message timestamp (None if empty)."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute("SELECT COUNT(*) as total, MIN(timestamp) as first_timestamp FROM messages")
+        return dict(cursor.fetchone())
     finally:
         conn.close()

@@ -11,6 +11,7 @@ from lib.db import (
     mark_processed,
     insert_activities,
     check_duplicate_activity,
+    insert_llm_usage,
 )
 from lib.prompts import get_system_prompt, build_user_prompt
 from lib.text import normalize_title
@@ -99,6 +100,7 @@ def run_extraction(max_batches=10):
             )
 
             total_tokens += response.usage.prompt_tokens + response.usage.completion_tokens
+            insert_llm_usage(model, response.usage.prompt_tokens, response.usage.completion_tokens, len(message_ids))
 
             response_text = response.choices[0].message.content
 
