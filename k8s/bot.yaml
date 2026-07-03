@@ -24,8 +24,10 @@ spec:
           emptyDir: {}
       containers:
         - name: bot
-          image: ads-painel-bot
-          imagePullPolicy: IfNotPresent
+          image: ads-painel:latest
+          imagePullPolicy: Never
+          command: ["node"]
+          args: ["dist/bot/index.js"]
           envFrom:
             - configMapRef:
                 name: ads-painel-config

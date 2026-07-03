@@ -14,11 +14,10 @@ COPY src/ ./src/
 COPY tsconfig.json ./
 COPY shared/ ./shared/
 
-# Build TypeScript
-RUN npm run build:server
+# Build TypeScript (server + bot + frontend)
+RUN npm run build
 
-# Build frontend
-RUN npm run build:frontend
+# Note: build script runs both build:server and build:frontend
 
 # Runtime stage
 FROM node:20-alpine
