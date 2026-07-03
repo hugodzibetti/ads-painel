@@ -1,27 +1,39 @@
+version: '3.8'
+
 services:
   app:
     build:
       context: .
-      dockerfile: app/Dockerfile
-    env_file: .env
+      dockerfile: Dockerfile
+    container_name: ads-painel-app
     ports:
-      - "8501:8501"
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=./data/app.db
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+      - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-https://opencode.ai/zen/go/v1}
+      - OPENCODE_MODEL=${OPENCODE_MODEL:-deepseek-v4-flash}
+      - WHATSAPP_GROUP_ID_ALUNOS=${WHATSAPP_GROUP_ID_ALUNOS}
+      - WHATSAPP_GROUP_ID_PROFS=${WHATSAPP_GROUP_ID_PROFS}
     volumes:
       - ./data:/app/data
+      - whatsapp-auth:/app/.wwebjs_cache
+    env_file:
+      - .env
     restart: unless-stopped
-
-  bot:
-    build:
-      context: .
-      dockerfile: bot/Dockerfile
-    env_file: .env
-    volumes:
-      - ./data:/app/data
-      - wwebjs_auth:/app/bot/.wwebjs_auth
-    shm_size: "1gb"
-    stdin_open: true
-    tty: true
-    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
-  wwebjs_auth:
+  whatsapp-auth:
+    driver: local
+
+networks:
+  default:
+    name: ads-painel-network
