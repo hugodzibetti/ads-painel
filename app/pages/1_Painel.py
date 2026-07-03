@@ -1,46 +1,22 @@
 import streamlit as st
-from lib.extraction import run_extraction
-from lib.db import fetch_activities, update_activity_status
+from datetime import datetime
+import pytz
+from lib.db import fetch_activities, update_activity_status, fetch_usage_summary
 from lib.theme import urgency_badge_html, inject_css
 
 st.set_page_config(page_title="Painel", layout="wide")
 inject_css()
 
 st.title("Atividades")
+st.markdown("Revise e atualize o status das atividades extraídas das mensagens do WhatsApp. A extração roda automaticamente 1x por dia.")
 
-col1, col2 = st.columns([4, 1])
-with col1:
-    st.markdown("Revise e atualize o status das atividades extraídas das mensagens do WhatsApp.")
-with col2:
-    if st.button(
-        "🔄 Atualizar",
-        use_container_width=True,
-        key="update_btn",
-        disabled=st.session_state.get("extraction_running", False),
-    ):
-        st.session_state["extraction_running"] = True
-        try:
-            with st.spinner("Processando mensagens..."):
-                result = run_extraction(max_batches=10)
-        finally:
-            st.session_state["extraction_running"] = False
-
-        if result["errors"]:
-            st.error("Erros durante extração:")
-            for err in result["errors"]:
-                st.write(f"- {err}")
-
-        st.success(f"✅ Processamento concluído")
-
-        result_cols = st.columns(4)
-        with result_cols[0]:
-            st.metric("Extraídas", result['activities_extracted'])
-        with result_cols[1]:
-            st.metric("Processadas", result['messages_processed'])
-        with result_cols[2]:
-            st.metric("Tokens", result['total_tokens_used'])
-        with result_cols[3]:
-            st.metric("Na Fila", result['messages_remaining'])
+usage = fetch_usage_summary()
+if usage['last_run_at']:
+    tz = pytz.timezone('America/Sao_Paulo')
+    last_run_local = datetime.fromisoformat(usage['last_run_at']).astimezone(tz)
+    st.caption(f"Última extração: {last_run_local.strftime('%d/%m/%Y %H:%M')}")
+else:
+    st.caption("Nenhuma extração executada ainda.")
 
 st.divider()
 
