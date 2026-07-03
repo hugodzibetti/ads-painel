@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot
+  template:
+    metadata:
+      labels:
+        app: bot
+    spec:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: ads-painel-data
+        - name: wwebjs-auth
+          emptyDir: {}
+      containers:
+        - name: bot
+          image: ads-painel-bot
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: ads-painel-config
+            - secretRef:
+                name: ads-painel-secret
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /app/data
+            - name: wwebjs-auth
+              mountPath: /app/bot/.wwebjs_auth
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"

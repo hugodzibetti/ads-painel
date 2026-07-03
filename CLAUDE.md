@@ -4,59 +4,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Personal MVP that captures messages from two WhatsApp groups (a class of ADS students), extracts academic deadlines (exams, assignments, events) via LLM, and shows them in a Streamlit dashboard for manual review. Two independent processes share one SQLite database:
+MVP that captures messages from two WhatsApp groups (ADS student class), extracts academic deadlines via LLM, and displays them in an OpenUI web dashboard. Unified Node.js/TypeScript codebase:
 
-- **`bot/`** (Node.js): connects to WhatsApp via `whatsapp-web.js`, listens on two group chats, writes raw messages to SQLite.
-- **`app/`** (Python/Streamlit): reads unprocessed messages, calls an LLM to extract structured activities, renders the review UI.
-- **`shared/schema.sql`**: single source of truth for the DB schema, executed idempotently by both processes on every connection/startup.
+- **`src/bot/index.ts`**: WhatsApp listener via `whatsapp-web.js`, writes raw messages to SQLite
+- **`src/server/`**: Express API server (extraction, database, stats endpoints)
+- **`src/frontend/`**: Vanilla OpenUI web interface (Dashboard, Messages, Status pages)
+- **`shared/schema.sql`**: SQLite schema (messages, activities tables)
 
 ## Commands
 
-### Bot (Node)
+### Development
 ```bash
-cd bot && npm install
-npm start                      # runs index.js, prints QR code first run
-node tests/test_config.js      # plain node script, no test runner — asserts + process.exit(1) on failure
-node tests/test_db.js
+npm install
+npm run dev              # Runs server + frontend together (server :3000, frontend :5173)
+npm run dev:server      # Express server only (port 3000)
+npm run dev:frontend    # Vite frontend only (port 5173, proxies /api to server)
+npm run bot             # Run WhatsApp bot (prints QR code on first login)
+npm run type-check      # TypeScript type checking
 ```
 
-### App (Python)
+### Production
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r app/requirements.txt
-cd app && streamlit run Home.py            # serves http://localhost:8501
-cd app && python -m pytest tests/          # tests do sys.path.insert(parent) to import lib.*
-cd app && python -m pytest tests/test_extraction.py -k some_test   # single test
+npm run build           # Build server and frontend
+npm start               # Run production server (port 3000)
 ```
 
-### Docker (both processes + shared volume)
+### Docker
 ```bash
-docker compose up --build
+docker compose up --build    # Runs unified app + bot + SQLite
 ```
-`app` Dockerfile installs `app/requirements.txt` and copies `shared/`; `bot` Dockerfile installs system Chromium (`PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true`) to avoid the ~300MB puppeteer download.
+Exposes port 3000 with full frontend + backend. Uses Node.js 20 Alpine image.
 
-There is no lint/typecheck config in this repo — don't invent one.
+No lint/typecheck config — don't invent one.
 
 ## Architecture
 
 ### Data flow
-1. `bot/index.js` listens on the two WhatsApp group IDs configured in `.env` (`WHATSAPP_GROUP_ID_ALUNOS`, `WHATSAPP_GROUP_ID_PROFS`). On first run with those vars unset, it lists all available groups with their IDs and exits (`process.exit(0)`) so the user can map them.
-2. Every accepted message is tagged with `group_label` (`'alunos'` or `'profs'`) and inserted via `bot/db.js` `insertMessage()` into the single `messages` table — **one feed, not two pipelines**. Non-text types (`image`, `video`, `audio`, `ptt`, `document`) are stored as a placeholder body like `[image]` with no OCR/transcription (out of scope for this MVP — see README "Fases futuras").
-3. `app/scripts/daily_extraction.py` is invoked once/day by an external cron/systemd timer (see README's "Extração diária" section) — this is the only trigger for extraction now; there is no manual button and no in-process polling. It calls `app/lib/extraction.py:run_extraction()` in a loop until the queue drains.
-4. `run_extraction()` pulls unprocessed messages in batches of 30, up to `max_batches=10` per call to `run_extraction()` (hard cost cap: 300 msgs per call; `daily_extraction.py` calls it in a loop until the queue is drained, so a busy day makes multiple calls, not one call processing everything). For each batch it builds a prompt via `app/lib/prompts.py`, calls the LLM, validates/dedups the result, and atomically inserts `activities` + marks the batch `processed=1` — even on invalid JSON or hallucinated `source_message_id` (the batch is still marked processed to avoid infinite reprocessing loops; only network/auth errors on the API call itself leave `processed=0` for retry).
-5. UI reads back through `app/lib/db.py` (`fetch_activities`, `fetch_messages`) for the Painel and Mensagens pages.
+1. `src/bot/index.ts` listens on WhatsApp group IDs from `.env` (`WHATSAPP_GROUP_ID_ALUNOS`, `WHATSAPP_GROUP_ID_PROFS`). First run with unset IDs lists available groups and exits so user can configure them.
+2. Messages are tagged with `group_label` (`'alunos'` or `'profs'`) and inserted via `src/server/db.ts:insertMessage()` into SQLite `messages` table. Non-text types (`image`, `video`, etc.) stored as `[type]` placeholder with no transcription (out of scope).
+3. Dashboard "Atualizar" button triggers `POST /api/extract` → `src/server/extraction.ts:runExtraction()` on-demand (no background polling).
+4. `runExtraction()` pulls unprocessed messages in batches of 30, max 10 batches/call (300 msg cap per click). For each batch: builds prompt via `src/server/prompts.ts`, calls OpenCode LLM, validates/dedups results, atomically inserts `activities` + marks batch `processed=1`. Invalid JSON or missing `source_message_id` still marks batch processed to avoid reprocessing loops.
+5. Frontend fetches activities via `GET /api/activities`, messages via `GET /api/messages`, stats via `GET /api/stats`. All pages use vanilla OpenUI components.
 
 ### Why one feed with a `group_label` instead of two pipelines
-The `profs` group (official announcements, explicit dates) is more authoritative than `alunos` (rumors, "does anyone know if there's a test today?", post-exam grade chat). Both are fed into the same extraction pass, but each prompt line is tagged `[id=N][group_label]` so the model can weigh conflicting info. This also means the same official notice reposted in both groups needs dedup — see below.
+`profs` group (official announcements) is more authoritative than `alunos` (rumors). Both feed the same extraction pass, each line tagged `[id=N][group_label]` so LLM can weigh conflicts. Dedups reposts across groups.
 
-### LLM contract (`app/lib/prompts.py` + `app/lib/extraction.py`)
-- Each message line in the prompt is `[id=<messages.id>][<group_label>] (<local timestamp>) <author>: <body>` — the model must echo back the literal `id` as `source_message_id`. `run_extraction()` discards (not aborts) any item whose `source_message_id` isn't in the current batch's id set.
-- Relative dates ("hoje", "amanhã", "segunda que vem") must be resolved using the *message's own timestamp* (shown per-line), not the "current time" at the top of the prompt — this is called out explicitly in the system prompt because messages are processed well after being sent.
-- Timestamps are stored as ISO-UTC in `messages.timestamp` and converted to `America/Sao_Paulo` only when building the prompt (`build_user_prompt` in `prompts.py`). Timezone is hardcoded, not configurable.
-- Dedup happens in `extraction.py` via `normalize_title()` (lowercase + strip accents) + `check_duplicate_activity()` in `db.py`, keyed on `(type, normalized title, due_date)` against any non-`descartado` activity — plain equality, no fuzzy matching.
-- `run_extraction()` returns token usage (`total_tokens_used`) and `messages_remaining` so the Painel page can show consumption and whether another click is needed to drain the backlog.
+### LLM contract (`src/server/prompts.ts` + `src/server/extraction.ts`)
+- Each prompt line: `[id=<messages.id>][<group_label>] (<local timestamp>) <author>: <body>` — LLM echoes literal `id` as `source_message_id`.
+- Relative dates ("hoje", "amanhã", "segunda que vem") resolved using message's own timestamp (not current time) — hardcoded in system prompt since processing is delayed.
+- Timestamps stored ISO-UTC in DB, converted to `America/Sao_Paulo` only when building prompt. Timezone not configurable.
+- Dedup via `normalize_title()` (lowercase + strip accents) + `check_duplicate_activity()` keyed on `(type, normalized title, due_date)` vs non-`descartado` activities — exact match only.
+- Returns token usage and messages remaining for Dashboard to display.
 
-### Config (`.env` at repo root, read by both processes)
+### Config (`.env` at repo root)
 ```
 OPENCODE_API_KEY=
 OPENCODE_BASE_URL=https://opencode.ai/zen/go/v1
@@ -64,17 +64,17 @@ OPENCODE_MODEL=deepseek-v4-flash
 WHATSAPP_GROUP_ID_ALUNOS=
 WHATSAPP_GROUP_ID_PROFS=
 DB_PATH=./data/app.db
+PORT=3000
+NODE_ENV=development
 ```
-- Node (`bot/config.js`) resolves `DB_PATH` via `path.resolve(__dirname, '..', ...)`.
-- Python (`app/lib/db.py`) resolves it via `Path(__file__).resolve().parents[2]` — both anchor to repo root, not `cwd`.
-- Do not change `OPENCODE_MODEL` away from `deepseek-v4-flash` without checking OpenCode Zen Go pricing first — cost control is a deliberate design constraint (10-batch cap, no background polling, token usage surfaced in the UI).
+`src/server/db.ts` and `src/bot/index.ts` resolve `DB_PATH` via `path.resolve()` to repo root. **Never change `OPENCODE_MODEL` without checking pricing** — cost control is deliberate (10-batch cap, no polling, usage surfaced in UI).
 
 ### SQLite concurrency
-No manual locking. Both `bot/db.js` (`better-sqlite3`, `{ timeout: 5000 }`) and `app/lib/db.py` (`sqlite3`, `PRAGMA busy_timeout=5000`) rely on WAL mode (set in `shared/schema.sql`) plus per-connection busy timeouts. Python opens a fresh connection per function call (not a cached singleton) because Streamlit runs callbacks on different threads.
+No manual locking. `src/server/db.ts` uses `better-sqlite3` with `timeout: 5000` and WAL mode (set in `shared/schema.sql`). Bot and server share same SQLite file with busy timeouts.
 
 ### Schema (`shared/schema.sql`)
-- `messages`: `wa_message_id` UNIQUE (dedup on insert — `insertMessage` swallows the UNIQUE constraint error), `group_label`, `processed` flag drives the extraction queue.
-- `activities`: `type` CHECK in `(prova, trabalho, evento, atividade)`, `status` CHECK in `(pendente, concluido, descartado)`, `confidence` CHECK in `(alta, media, baixa)`, `source_message_id` FK back to `messages`.
+- `messages`: `wa_message_id` UNIQUE (INSERT-or-ignore on dupes), `group_label`, `processed` flag
+- `activities`: `type` CHECK `(prova, trabalho, evento, atividade)`, `status` CHECK `(pendente, concluido, descartado)`, `confidence` CHECK `(alta, media, baixa)`, `source_message_id` FK to messages
 
-### Out of scope for this MVP (see README "Fases futuras" for detail)
-Media extraction (images/audio/PDF are placeholder-only), retroactive import of full chat history, class recording/transcription, calendar integration.
+### Out of scope (see README "Fases futuras")
+Media extraction (images/audio/PDF placeholder-only), retroactive history import, transcription, calendar integration
