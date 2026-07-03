@@ -268,7 +268,7 @@ pip install -r app/requirements.txt
 ### Extração retorna "items": []
 
 Pode ser:
-- Nenhuma mensagem nova foi adicionada desde o último clique
+- Nenhuma mensagem nova foi adicionada desde a última execução
 - Mensagens são apenas conversas off-topic (o modelo as descarta corretamente)
 - Mensagens têm prazos em formatação que o modelo não reconhecer (ajuste o prompt em `app/lib/prompts.py`)
 
