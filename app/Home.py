@@ -30,7 +30,7 @@ with st.container(border=True):
     st.subheader("Fluxo de Uso")
     st.markdown("""
 1. O bot captura mensagens dos grupos de WhatsApp
-2. Clique em **"Atualizar"** no Painel para extrair atividades (prazos, provas, trabalhos)
+2. A extração de atividades (prazos, provas, trabalhos) roda automaticamente 1x por dia
 3. Revise cada atividade: marque como concluída ou descarte as incorretas
 4. Consulte o histórico de mensagens na aba **Mensagens** quando precisar
 """)
