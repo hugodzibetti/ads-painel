@@ -7,6 +7,7 @@ from openai import OpenAI
 from lib.db import (
     fetch_unprocessed_messages,
     fetch_unprocessed_count,
+    fetch_active_activities,
     mark_processed,
     insert_activities,
     check_duplicate_activity,
@@ -85,7 +86,8 @@ def run_extraction(max_batches=10):
         message_ids = [msg['id'] for msg in messages]
 
         try:
-            user_prompt = build_user_prompt(messages)
+            existing_activities = fetch_active_activities()
+            user_prompt = build_user_prompt(messages, existing_activities=existing_activities)
 
             response = client.chat.completions.create(
                 model=model,

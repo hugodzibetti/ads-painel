@@ -108,6 +108,40 @@ def test_run_extraction_success(mock_openai_cls):
 
 
 @patch('lib.extraction.OpenAI')
+def test_run_extraction_includes_existing_activities_in_prompt(mock_openai_cls):
+    db_path = create_test_db()
+    init_test_schema(db_path)
+    setup_env(db_path)
+
+    msg_id = insert_message(db_path, 'msg1', 'Prova de Redes N2 semana que vem')
+
+    conn = sqlite3.connect(db_path)
+    known_msg_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg0', 'profs', 'Prof', 'Prova de Redes dia 10/07', datetime.now(timezone.utc).isoformat(), 1)
+    ).fetchone()[0]
+    conn.execute(
+        "INSERT INTO activities (type, title, due_date, source_message_id, status) VALUES (?, ?, ?, ?, ?)",
+        ('prova', 'Prova de Redes', '2026-07-10', known_msg_id, 'pendente')
+    )
+    conn.commit()
+    conn.close()
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = make_llm_response(json.dumps({"items": []}))
+    mock_openai_cls.return_value = mock_client
+
+    run_extraction(max_batches=1)
+
+    sent_prompt = mock_client.chat.completions.create.call_args.kwargs['messages'][1]['content']
+    assert 'Atividades já conhecidas' in sent_prompt
+    assert '[prova] Prova de Redes — 2026-07-10 (pendente)' in sent_prompt
+    assert is_processed(db_path, msg_id) == 1
+
+    os.unlink(db_path)
+
+
+@patch('lib.extraction.OpenAI')
 def test_run_extraction_hallucinated_source_id(mock_openai_cls):
     db_path = create_test_db()
     init_test_schema(db_path)
