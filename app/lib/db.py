@@ -169,6 +169,24 @@ def check_duplicate_activity(type_, title_normalized, due_date):
     finally:
         conn.close()
 
+def fetch_active_activities(limit=200):
+    """Fetch pendente + concluido activities (never descartado) as LLM prompt context, ordered by due_date."""
+    conn = get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            SELECT type, title, due_date, status FROM activities
+            WHERE status IN ('pendente', 'concluido')
+            ORDER BY due_date ASC
+            LIMIT ?
+            """,
+            (limit,)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
 def fetch_messages(limit=200, offset=0, search_query=None):
     """Fetch messages with optional search."""
     conn = get_connection()

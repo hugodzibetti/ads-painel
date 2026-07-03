@@ -16,6 +16,7 @@ from lib.db import (
     fetch_activities,
     update_activity_status,
     check_duplicate_activity,
+    fetch_active_activities,
     fetch_messages,
     insert_message,
     message_similar_exists,
@@ -194,6 +195,66 @@ def test_check_duplicate_activity_ignores_accents():
     os.unlink(db_path)
 
 
+def test_fetch_active_activities_excludes_descartado_and_orders_by_due_date():
+    """fetch_active_activities must skip descartado and order pendente+concluido by due_date."""
+    db_path = create_test_db()
+    init_test_schema(db_path)
+
+    os.environ['DB_PATH'] = db_path
+
+    conn = sqlite3.connect(db_path)
+    msg_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg1', 'alunos', 'João', 'test', datetime.now(timezone.utc).isoformat(), 0)
+    ).fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    insert_activities([
+        {'type': 'prova', 'title': 'Prova B', 'due_date': '2026-07-20', 'source_message_id': msg_id, 'status': 'pendente'},
+        {'type': 'trabalho', 'title': 'Trabalho A', 'due_date': '2026-07-05', 'source_message_id': msg_id, 'status': 'concluido'},
+        {'type': 'evento', 'title': 'Evento Descartado', 'due_date': '2026-07-01', 'source_message_id': msg_id, 'status': 'descartado'},
+    ])
+
+    active = fetch_active_activities()
+
+    assert [a['title'] for a in active] == ['Trabalho A', 'Prova B']
+    assert all(a['status'] != 'descartado' for a in active)
+    assert active[0]['type'] == 'trabalho'
+    assert active[0]['due_date'] == '2026-07-05'
+
+    os.unlink(db_path)
+
+
+def test_fetch_active_activities_respects_limit():
+    """fetch_active_activities must cap results at the given limit."""
+    db_path = create_test_db()
+    init_test_schema(db_path)
+
+    os.environ['DB_PATH'] = db_path
+
+    conn = sqlite3.connect(db_path)
+    msg_id = conn.execute(
+        "INSERT INTO messages (wa_message_id, group_label, author, body, timestamp, processed) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        ('msg1', 'alunos', 'João', 'test', datetime.now(timezone.utc).isoformat(), 0)
+    ).fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    insert_activities([
+        {'type': 'prova', 'title': 'Prova 1', 'due_date': '2026-07-01', 'source_message_id': msg_id},
+        {'type': 'prova', 'title': 'Prova 2', 'due_date': '2026-07-02', 'source_message_id': msg_id},
+        {'type': 'prova', 'title': 'Prova 3', 'due_date': '2026-07-03', 'source_message_id': msg_id},
+    ])
+
+    active = fetch_active_activities(limit=2)
+
+    assert len(active) == 2
+    assert [a['title'] for a in active] == ['Prova 1', 'Prova 2']
+
+    os.unlink(db_path)
+
+
 def test_mark_processed():
     """Test marking messages as processed."""
     db_path = create_test_db()
@@ -324,6 +385,12 @@ if __name__ == '__main__':
 
     test_check_duplicate_activity_ignores_accents()
     print("✓ test_check_duplicate_activity_ignores_accents")
+
+    test_fetch_active_activities_excludes_descartado_and_orders_by_due_date()
+    print("✓ test_fetch_active_activities_excludes_descartado_and_orders_by_due_date")
+
+    test_fetch_active_activities_respects_limit()
+    print("✓ test_fetch_active_activities_respects_limit")
 
     test_mark_processed()
     print("✓ test_mark_processed")
