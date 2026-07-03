@@ -1,14 +1,51 @@
+# Environment
 .env
+.secret.env
+
+# Dependencies
 node_modules/
 venv/
-__pycache__/
-*.pyc
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Database
 data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
-.streamlit/
+
+# WhatsApp auth
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Development
 .superpowers/
 .playwright-mcp/
-bot/.wwebjs_auth/
-bot/.wwebjs_cache/
+.pytest_cache/
+.claude/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Legacy (Python/Streamlit)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.streamlit/
+
+# Temporary
+*.log
+*.tmp
+/tmp
