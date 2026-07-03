@@ -89,10 +89,7 @@ A aplicação abrirá em `http://localhost:8501`.
 
 1. **Bot rodando**: captura mensagens continuamente dos dois grupos WhatsApp
 2. **App aberta**: exibe contador de mensagens pendentes e atividades
-3. **Clique "Atualizar" no Painel**: 
-   - Processa até **10 lotes de 30 mensagens** por clique (limite de custo)
-   - LLM extrai atividades (prova, trabalho, evento, atividade) com prazos
-   - Mostra quantas atividades foram extraídas e tokens consumidos
+3. **Extração automática 1x/dia**: um agendador externo (cron/systemd, veja "Extração diária" abaixo) roda `python -m scripts.daily_extraction`, que processa até **10 lotes de 30 mensagens** por execução (limite de custo) e extrai atividades (prova, trabalho, evento, atividade) com prazos
 4. **Revise no Painel**:
    - Tabs: Pendentes, Concluídas, Descartadas
    - Para cada atividade: marque como ✅ Concluir ou ❌ Descartar
@@ -116,6 +113,44 @@ Requer `ffmpeg` instalado no sistema para processar vídeos (`apt install ffmpeg
 
 Rodar `large-v3` só em CPU é bem lento para exports grandes — recomenda-se GPU se você tiver histórico volumoso pra importar.
 
+## Extração diária
+
+A extração de atividades não roda mais por clique manual — um agendador externo ao repositório (cron ou systemd timer, específico do host onde a aplicação roda) deve invocar `python -m scripts.daily_extraction` uma vez por dia. O script drena a fila inteira de mensagens não processadas na mesma execução (mesmo loop de lotes de 10x30 usado em `import_export.py`), então mesmo picos de volume acima de 300 mensagens/dia são processados numa única chamada do agendador.
+
+**Crontab** (`crontab -e`):
+```bash
+0 6 * * * cd /caminho/para/ads-painel/app && venv/bin/python -m scripts.daily_extraction >> /caminho/para/ads-painel/logs/daily_extraction.log 2>&1
+```
+
+**systemd timer** (alternativa): crie `/etc/systemd/system/ads-painel-extraction.service`:
+```ini
+[Unit]
+Description=Extração diária de atividades do ads-painel
+
+[Service]
+Type=oneshot
+WorkingDirectory=/caminho/para/ads-painel/app
+ExecStart=/caminho/para/ads-painel/app/venv/bin/python -m scripts.daily_extraction
+User=SEU_USUARIO
+```
+
+e `/etc/systemd/system/ads-painel-extraction.timer`:
+```ini
+[Unit]
+Description=Roda a extração diária do ads-painel às 6h
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Depois: `sudo systemctl enable --now ads-painel-extraction.timer`.
+
+Nenhum desses arquivos é versionado no repositório — caminhos e usuário do sistema variam por host, então cabe a quem hospeda a aplicação adaptar e instalar localmente.
+
 ## Estrutura de arquivos
 
 ```
@@ -134,6 +169,8 @@ ads-painel/
 │   │   ├── db.py               # Acesso SQLite (Python)
 │   │   ├── prompts.py          # Templates de prompt LLM
 │   │   └── extraction.py       # Pipeline de extração
+│   ├── scripts/
+│   │   └── daily_extraction.py # CLI invocado 1x/dia pelo agendador externo
 │   └── pages/
 │       ├── 1_Painel.py         # Página de revisão de atividades
 │       └── 2_Mensagens.py      # Página de feed de mensagens
@@ -161,8 +198,8 @@ ads-painel/
 
 ### Controle de custo
 
-- **Cap de processamento**: máximo 10 lotes de 30 mensagens **por clique** em "Atualizar"
-- **Sem polling automático**: extração só acontece quando você clica, não em background
+- **Cap de processamento**: máximo 10 lotes de 30 mensagens **por execução** do `daily_extraction`
+- **Frequência fixa**: extração roda 1x/dia via agendador externo (cron/systemd), nunca em polling contínuo
 - **Visibilidade**: tokens consumidos exibidos após cada execução
 - **Modelo**: `deepseek-v4-flash` (barato); **não altere sem avaliar custo**
 
@@ -190,7 +227,7 @@ A biblioteca `whatsapp-web.js` usa automação do navegador (Chromium) para cone
 ### 💰 Uso de API
 
 - **OpenCode Zen Go**: monitore regularmente o painel de uso no site do OpenCode para acompanhar consumo
-- **Custo por token**: `deepseek-v4-flash` é barato, mas acumula com o tempo se "Atualizar" for clicado muitas vezes
+- **Custo por token**: `deepseek-v4-flash` é barato, mas acumula com o tempo — monitore o consumo diário exibido no Painel
 - **Atingir limite**: se atingir limite de uso do plano, a extração falhará com erro de API key inválida
 
 ### 📱 Funcionalidades não incluídas neste MVP
@@ -231,7 +268,7 @@ pip install -r app/requirements.txt
 ### Extração retorna "items": []
 
 Pode ser:
-- Nenhuma mensagem nova foi adicionada desde o último clique
+- Nenhuma mensagem nova foi adicionada desde a última execução
 - Mensagens são apenas conversas off-topic (o modelo as descarta corretamente)
 - Mensagens têm prazos em formatação que o modelo não reconhecer (ajuste o prompt em `app/lib/prompts.py`)
 

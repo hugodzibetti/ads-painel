@@ -139,7 +139,7 @@ def test_run_extraction_marks_processed_despite_bad_timestamp():
     """
     Regression test: a message with a malformed timestamp must not stop the
     batch from reaching the API call and being marked processed=1 — otherwise
-    it gets retried forever on every "Atualizar" click (see CLAUDE.md contract:
+    it gets retried forever on every extraction run (see CLAUDE.md contract:
     only network/auth errors on the API call itself should leave processed=0).
     """
     db_path = create_test_db()

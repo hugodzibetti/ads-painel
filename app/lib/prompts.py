@@ -54,7 +54,7 @@ PADRÕES A PRIORIZAR:
 Extraia apenas atividades futuras com informação acionável. Se não houver atividade, retorne {"items": []}.
 """
 
-def build_user_prompt(messages):
+def build_user_prompt(messages, existing_activities=None):
     """Build the user prompt with messages and current context."""
     tz = pytz.timezone('America/Sao_Paulo')
     now_local = datetime.now(tz)
@@ -71,11 +71,19 @@ def build_user_prompt(messages):
     }.get(day_name, day_name)
     time_str = now_local.strftime('%H:%M')
 
-    prompt = f"""Data/hora atual: {date_str} ({day_name_pt}), {time_str}, America/Sao_Paulo.
+    prompt = f"Data/hora atual: {date_str} ({day_name_pt}), {time_str}, America/Sao_Paulo.\n\n"
 
-Analise as seguintes mensagens e extraia atividades acadêmicas:
+    if existing_activities:
+        prompt += (
+            "Atividades já conhecidas (não recrie itens que já existem aqui — ajuste ou "
+            "ignore; use isto para julgar continuações e variações de uma mesma atividade):\n"
+        )
+        for act in existing_activities:
+            prompt += f"- [{act['type']}] {act['title']} — {act['due_date']} ({act['status']})\n"
+        prompt += "\n"
 
-"""
+    prompt += "Analise as seguintes mensagens e extraia atividades acadêmicas:\n\n"
+
     for msg in messages:
         try:
             msg_ts = datetime.fromisoformat(msg.get('timestamp'))

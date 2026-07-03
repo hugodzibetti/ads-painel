@@ -164,6 +164,51 @@ def test_build_user_prompt_date_context():
     assert 'America/Sao_Paulo' in prompt
 
 
+def test_build_user_prompt_includes_existing_activities_block():
+    """When existing_activities is given, a labeled context block must appear before the messages."""
+    messages = [
+        {
+            'id': 1,
+            'group_label': 'alunos',
+            'author': 'João',
+            'body': 'Prova de redes semana que vem',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+    ]
+    existing_activities = [
+        {'type': 'prova', 'title': 'Prova de Redes', 'due_date': '2026-07-10', 'status': 'pendente'},
+        {'type': 'trabalho', 'title': 'Trabalho de BD', 'due_date': '2026-07-05', 'status': 'concluido'},
+    ]
+
+    prompt = build_user_prompt(messages, existing_activities=existing_activities)
+
+    assert 'Atividades já conhecidas' in prompt
+    assert '[prova] Prova de Redes — 2026-07-10 (pendente)' in prompt
+    assert '[trabalho] Trabalho de BD — 2026-07-05 (concluido)' in prompt
+    # the context block must come before the messages section
+    assert prompt.index('Atividades já conhecidas') < prompt.index('[id=1]')
+
+
+def test_build_user_prompt_omits_existing_activities_block_when_empty_or_none():
+    """No existing_activities arg, or an empty list, must produce identical output — no regression."""
+    messages = [
+        {
+            'id': 1,
+            'group_label': 'alunos',
+            'author': 'João',
+            'body': 'Prova de redes',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+    ]
+
+    prompt_default = build_user_prompt(messages)
+    prompt_none = build_user_prompt(messages, existing_activities=None)
+    prompt_empty = build_user_prompt(messages, existing_activities=[])
+
+    assert 'Atividades já conhecidas' not in prompt_default
+    assert prompt_default == prompt_none == prompt_empty
+
+
 if __name__ == '__main__':
     test_get_system_prompt()
     print("✓ test_get_system_prompt")
@@ -188,5 +233,11 @@ if __name__ == '__main__':
 
     test_build_user_prompt_date_context()
     print("✓ test_build_user_prompt_date_context")
+
+    test_build_user_prompt_includes_existing_activities_block()
+    print("✓ test_build_user_prompt_includes_existing_activities_block")
+
+    test_build_user_prompt_omits_existing_activities_block_when_empty_or_none()
+    print("✓ test_build_user_prompt_omits_existing_activities_block_when_empty_or_none")
 
     print("\nAll tests passed!")
