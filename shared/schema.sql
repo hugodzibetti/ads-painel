@@ -40,3 +40,32 @@ CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
 CREATE INDEX IF NOT EXISTS idx_activities_due_date ON activities(due_date);
 CREATE INDEX IF NOT EXISTS idx_activities_source_message_id ON activities(source_message_id);
 CREATE INDEX IF NOT EXISTS idx_llm_usage_timestamp ON llm_usage(timestamp);
+
+CREATE TABLE IF NOT EXISTS briefings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  activities_count INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_base (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  messages_read INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS outgoing_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_label TEXT NOT NULL,
+  body TEXT NOT NULL,
+  activity_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TEXT,
+  FOREIGN KEY (activity_id) REFERENCES activities(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_briefings_created_at ON briefings(created_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_generated_at ON knowledge_base(generated_at);
+CREATE INDEX IF NOT EXISTS idx_outgoing_messages_status ON outgoing_messages(status);

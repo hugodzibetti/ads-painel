@@ -257,6 +257,93 @@ describe('insertLLMUsage / fetchUsageSummary', () => {
   });
 });
 
+describe('runMigrations — activity delivery columns', () => {
+  it('adds delivery columns to activities and is idempotent', async () => {
+    const { openDb, runMigrations } = await freshDb();
+    const db = openDb();
+    runMigrations(db);
+    runMigrations(db); // second call must not throw
+    const cols = (db.prepare('PRAGMA table_info(activities)').all() as any[]).map((c: any) => c.name);
+    expect(cols).toContain('is_graded');
+    expect(cols).toContain('delivery_method');
+    expect(cols).toContain('delivery_url');
+    expect(cols).toContain('delivery_instructions');
+    expect(cols).toContain('delivery_context');
+    expect(cols).toContain('delivery_draft');
+    expect(cols).toContain('delivery_stage');
+  });
+
+  it('adds run_id column to llm_usage', async () => {
+    const { openDb, runMigrations } = await freshDb();
+    const db = openDb();
+    runMigrations(db);
+    const cols = (db.prepare('PRAGMA table_info(llm_usage)').all() as any[]).map((c: any) => c.name);
+    expect(cols).toContain('run_id');
+  });
+});
+
+describe('briefings table', () => {
+  it('inserts and retrieves latest briefing', async () => {
+    const { openDb, insertBriefing, fetchLatestBriefing } = await freshDb();
+    openDb();
+    expect(fetchLatestBriefing()).toBeNull();
+    insertBriefing('Prova amanhã.', 2);
+    const b = fetchLatestBriefing();
+    expect(b?.content).toBe('Prova amanhã.');
+    expect(b?.activities_count).toBe(2);
+  });
+});
+
+describe('knowledge_base table', () => {
+  it('inserts and retrieves latest knowledge base', async () => {
+    const { openDb, insertKnowledgeBase, fetchLatestKnowledgeBase } = await freshDb();
+    openDb();
+    expect(fetchLatestKnowledgeBase()).toBeNull();
+    insertKnowledgeBase('{"professors":[]}', 100);
+    const kb = fetchLatestKnowledgeBase();
+    expect(kb?.content).toBe('{"professors":[]}');
+    expect(kb?.messages_read).toBe(100);
+  });
+});
+
+describe('updateActivityDelivery / appendActivityContext', () => {
+  it('updates delivery fields on an activity', async () => {
+    const { openDb, insertMessage, insertActivities, updateActivityDelivery, fetchActivities } = await freshDb();
+    openDb();
+    insertMessage('wa1', 'profs', 'Prof', 'entrega', '2026-07-10T10:00:00Z');
+    insertActivities([{ type: 'trabalho', title: 'TDD', due_date: '2026-07-20', source_message_id: 1, status: 'pendente', confidence: 'alta' }]);
+    updateActivityDelivery(1, { delivery_method: 'google_forms', delivery_stage: 'gathering' });
+    const acts = fetchActivities() as any[];
+    expect(acts[0].delivery_method).toBe('google_forms');
+    expect(acts[0].delivery_stage).toBe('gathering');
+  });
+
+  it('appends context JSON to delivery_context', async () => {
+    const { openDb, insertMessage, insertActivities, appendActivityContext, fetchActivities } = await freshDb();
+    openDb();
+    insertMessage('wa1', 'profs', 'Prof', 'entrega', '2026-07-10T10:00:00Z');
+    insertActivities([{ type: 'trabalho', title: 'TDD', due_date: '2026-07-20', source_message_id: 1, status: 'pendente', confidence: 'alta' }]);
+    appendActivityContext(1, { message_id: 5, author: 'Aluno', body: 'Formato ABNT?', timestamp: '2026-07-11T10:00:00Z' });
+    const acts = fetchActivities() as any[];
+    const ctx = JSON.parse(acts[0].delivery_context || '[]');
+    expect(ctx).toHaveLength(1);
+    expect(ctx[0].author).toBe('Aluno');
+  });
+});
+
+describe('outgoing_messages queue', () => {
+  it('inserts and fetches pending outgoing messages', async () => {
+    const { openDb, insertOutgoingMessage, fetchPendingOutgoing, markOutgoingSent } = await freshDb();
+    openDb();
+    insertOutgoingMessage('alunos', 'Trabalho entregue!', null);
+    const pending = fetchPendingOutgoing();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].body).toBe('Trabalho entregue!');
+    markOutgoingSent(pending[0].id!);
+    expect(fetchPendingOutgoing()).toHaveLength(0);
+  });
+});
+
 describe('fetchActivityStatusCounts / fetchActivityTypeCounts / fetchMessageStats', () => {
   it('groups activities by status and by type', async () => {
     const { insertMessage, fetchUnprocessedMessages, insertActivities, updateActivityStatus, fetchActivityStatusCounts, fetchActivityTypeCounts } =

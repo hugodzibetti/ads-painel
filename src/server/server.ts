@@ -75,6 +75,7 @@ app.get('/api/activities', (req: Request, res: Response): void => {
 
     const activities = fetchActivities(
       status ? String(status) : undefined,
+      undefined,
       parsedLimit + parsedOffset
     );
 
