@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const createCompletion = vi.hoisted(() => vi.fn());
+const mockChatFn = vi.hoisted(() => vi.fn());
 
-vi.mock('openai', () => ({
-  default: class {
-    chat = { completions: { create: createCompletion } };
-  },
+vi.mock('./llm.js', () => ({
+  chat: mockChatFn,
+  getModel: vi.fn(() => 'test-model'),
 }));
 
 const dbMocks = vi.hoisted(() => ({
@@ -15,9 +14,18 @@ const dbMocks = vi.hoisted(() => ({
   insertActivities: vi.fn(),
   checkDuplicateActivity: vi.fn(),
   insertLLMUsage: vi.fn(),
+  fetchLatestKnowledgeBase: vi.fn().mockReturnValue(null),
+  updateActivityDelivery: vi.fn(),
+  fetchActivities: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('./db.js', () => dbMocks);
+
+// Silence post-run pipeline — all wrapped in try/catch anyway, but let's be explicit
+vi.mock('./deliveryDetector.js', () => ({ classifyAndDetect: vi.fn().mockResolvedValue({ is_graded: false, delivery_method: 'unknown', delivery_url: null, delivery_instructions: null }) }));
+vi.mock('./briefing.js', () => ({ generateBriefing: vi.fn() }));
+vi.mock('./contextMonitor.js', () => ({ scanNewMessages: vi.fn() }));
+vi.mock('./drafter.js', () => ({ checkAndDraftSubmissions: vi.fn() }));
 
 import { runExtraction } from './extraction.js';
 
@@ -31,9 +39,10 @@ const sampleMessage = (id: number) => ({
 });
 
 function mockCompletion(content: string, usage = { prompt_tokens: 10, completion_tokens: 5 }) {
-  createCompletion.mockResolvedValueOnce({
-    choices: [{ message: { content } }],
-    usage,
+  mockChatFn.mockResolvedValueOnce({
+    content,
+    promptTokens: usage.prompt_tokens,
+    completionTokens: usage.completion_tokens,
   });
 }
 
@@ -45,10 +54,12 @@ describe('runExtraction', () => {
     dbMocks.fetchUnprocessedMessages.mockReset();
     dbMocks.fetchUnprocessedCount.mockReset().mockReturnValue(0);
     dbMocks.markBatchProcessed.mockReset();
-    dbMocks.insertActivities.mockReset();
+    dbMocks.insertActivities.mockReset().mockReturnValue([]);
     dbMocks.checkDuplicateActivity.mockReset().mockReturnValue(false);
     dbMocks.insertLLMUsage.mockReset();
-    createCompletion.mockReset();
+    dbMocks.fetchActivities.mockReset().mockReturnValue([]);
+    dbMocks.updateActivityDelivery.mockReset();
+    mockChatFn.mockReset();
   });
 
   afterEach(() => {
@@ -67,7 +78,7 @@ describe('runExtraction', () => {
     dbMocks.fetchUnprocessedMessages.mockReturnValue([]);
     const result = await runExtraction();
     expect(result.messages_processed).toBe(0);
-    expect(createCompletion).not.toHaveBeenCalled();
+    expect(mockChatFn).not.toHaveBeenCalled();
   });
 
   it('inserts valid extracted activities and marks the batch processed', async () => {
@@ -199,7 +210,7 @@ describe('runExtraction', () => {
 
   it('records the LLM error and continues instead of throwing when a batch call rejects', async () => {
     dbMocks.fetchUnprocessedMessages.mockReturnValueOnce([sampleMessage(1)]).mockReturnValue([]);
-    createCompletion.mockRejectedValueOnce(new Error('rate limited'));
+    mockChatFn.mockRejectedValueOnce(new Error('rate limited'));
 
     const result = await runExtraction();
     expect(result.errors).toEqual(['Batch 1 extraction error: rate limited']);
@@ -212,6 +223,6 @@ describe('runExtraction', () => {
     mockCompletion(JSON.stringify({ items: [] }));
 
     await runExtraction(30, 2);
-    expect(createCompletion).toHaveBeenCalledTimes(2);
+    expect(mockChatFn).toHaveBeenCalledTimes(2);
   });
 });
