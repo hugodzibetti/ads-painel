@@ -2,60 +2,72 @@ import { Renderer } from '@openuidev/react-lang';
 import { openuiLibrary } from '../library';
 import { toolProvider } from '../toolProvider';
 
-// OpenUI Lang program. No LLM involved — Query/Mutation run toolProvider
-// functions directly, and $variables + @builtins handle all filtering,
-// sorting, and interactivity client-side (see @Run/@Set/@Filter/@Sort).
 const dashboardProgram = `
-$statusFilter = "all"
-$typeFilter = "all"
-$search = ""
-$editId = ""
-$editStatus = "pendente"
-$showEdit = false
+$showReview = false
+$reviewId = ""
+$reviewDraft = ""
+$reviewMethod = ""
+$reviewCtx = ""
+$guidanceText = ""
+$showGuidance = false
 
-stats = Query("get_stats", {}, {total_messages: 0, total_activities: 0, messages_remaining: 0, activities_by_status: {pendente: 0}, token_usage: {total_tokens: 0, run_count: 0}})
-activitiesQ = Query("get_activities", {status: $statusFilter}, {data: []})
-extractResult = Mutation("run_extraction", {})
-updateResult = Mutation("update_activity_status", {id: $editId, status: $editStatus})
+briefingQ = Query("get_briefing", {}, {content: "Carregando...", minutes_ago: null})
+stats = Query("get_stats", {}, {last_extraction_minutes_ago: null, deadline_density: {seg:0,ter:0,qua:0,qui:0,sex:0,sab:0,dom:0}}, 60)
+weekQ = Query("get_activities", {urgency: "urgent", status: "pendente"}, {data: []})
+futureQ = Query("get_activities", {urgency: "future", status: "pendente"}, {data: []})
+reviewQ = Query("get_activities", {status: "pendente"}, {data: []})
 
-byType = $typeFilter == "all" ? activitiesQ.data : @Filter(activitiesQ.data, "type", "==", $typeFilter)
-filtered = $search == "" ? byType : @Filter(byType, "title", "contains", $search)
-sorted = @Sort(filtered, "due_date", "asc")
+weekSorted = @Sort(weekQ.data, "due_date", "asc")
+futureSorted = @Sort(futureQ.data, "due_date", "asc")
+pendingReview = @Filter(reviewQ.data, "delivery_stage", "==", "pending_review")
+needsMethod = @Filter(reviewQ.data, "delivery_stage", "==", "needs_method")
 
-refreshBtn = Button("Atualizar", Action([@Run(extractResult), @Run(activitiesQ), @Run(stats)]), "primary")
-header = Card([CardHeader("ADS Panel", "Dashboard"), refreshBtn], "clear", "row", "m", "center", "between")
+updateDelivery = Mutation("update_activity_delivery", {id: $reviewId, delivery_draft: $reviewDraft, action: "approve"})
+regenDelivery = Mutation("update_activity_delivery", {id: $reviewId, delivery_instructions: $guidanceText, action: "regenerate"})
+markDone = Mutation("update_activity_status", {id: $reviewId, status: "concluido"})
+markIgnored = Mutation("update_activity_delivery", {id: $reviewId, action: "ignore"})
 
-kpiMessages = Card([TextContent("Total Mensagens", "small"), TextContent("" + stats.total_messages, "large-heavy"), TextContent("" + stats.messages_remaining + " não processadas", "small")], "sunk", "column", "s")
-kpiActivities = Card([TextContent("Total Atividades", "small"), TextContent("" + stats.total_activities, "large-heavy"), TextContent("" + stats.activities_by_status.pendente + " pendentes", "small")], "sunk", "column", "s")
-kpiTokens = Card([TextContent("Tokens Utilizados", "small"), TextContent("" + stats.token_usage.total_tokens, "large-heavy"), TextContent("" + stats.token_usage.run_count + " execuções", "small")], "sunk", "column", "s")
-kpiCost = Card([TextContent("Custo Estimado", "small"), TextContent("R$ " + @Round(stats.token_usage.total_tokens / 5000000 * 0.1 * 5, 2), "large-heavy")], "sunk", "column", "s")
-kpiRow = Stack([kpiMessages, kpiActivities, kpiTokens, kpiCost], "row", "m", "stretch", "start", true)
+lastRunLabel = stats.last_extraction_minutes_ago == null ? "nunca" : "" + stats.last_extraction_minutes_ago + "min atras"
+header = Stack([TextContent("ADS Panel", "large-heavy"), TextContent("auto - ultima: " + lastRunLabel, "small")], "row", "none", "center", "between")
 
-filterStatus = FormControl("Status", Select("statusFilter", [SelectItem("all", "Todos os Status"), SelectItem("pendente", "Pendente"), SelectItem("concluido", "Concluído"), SelectItem("descartado", "Descartado")], null, null, $statusFilter))
-filterType = FormControl("Tipo", Select("typeFilter", [SelectItem("all", "Todos os Tipos"), SelectItem("prova", "Prova"), SelectItem("trabalho", "Trabalho"), SelectItem("evento", "Evento"), SelectItem("atividade", "Atividade")], null, null, $typeFilter))
-filterSearch = FormControl("Buscar", Input("search", "Buscar atividade...", "text", null, $search))
-filterRow = Card([filterStatus, filterType, filterSearch], "clear", "row", "m", "end")
+briefingCard = Callout("info", "Resumo do dia", briefingQ.content)
 
-colTitle = Col("Atividade", sorted.title)
-colType = Col("Tipo", @Each(sorted, "a", Tag(a.type, null, "sm", a.type == "prova" ? "danger" : a.type == "trabalho" ? "warning" : a.type == "evento" ? "info" : "neutral")))
-colStatus = Col("Status", @Each(sorted, "a", Tag(a.status, null, "sm", a.status == "pendente" ? "warning" : a.status == "concluido" ? "success" : "neutral")))
-colConfidence = Col("Confiança", @Each(sorted, "a", Tag(a.confidence, null, "sm", a.confidence == "alta" ? "success" : a.confidence == "media" ? "info" : "danger")))
-colDate = Col("Prazo", sorted.due_date)
-colActions = Col("Ações", @Each(sorted, "a", Button("Alterar", Action([@Set($editId, a.id), @Set($editStatus, a.status), @Set($showEdit, true)]), "secondary", "normal", "extra-small")))
-tbl = Table([colTitle, colType, colStatus, colConfidence, colDate, colActions])
-countLabel = TextContent("" + @Count(sorted) + " atividade(s)", "small")
-emptyState = @Count(sorted) > 0 ? tbl : TextContent("Nenhuma atividade encontrada.")
-tableSection = Card([CardHeader("Atividades Acadêmicas"), countLabel, emptyState], "card", "column", "m")
+densityRow = Stack([
+  Stack([TextContent("Seg", "small"), Tag("" + stats.deadline_density.seg, null, "sm", stats.deadline_density.seg > 2 ? "danger" : stats.deadline_density.seg > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Ter", "small"), Tag("" + stats.deadline_density.ter, null, "sm", stats.deadline_density.ter > 2 ? "danger" : stats.deadline_density.ter > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Qua", "small"), Tag("" + stats.deadline_density.qua, null, "sm", stats.deadline_density.qua > 2 ? "danger" : stats.deadline_density.qua > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Qui", "small"), Tag("" + stats.deadline_density.qui, null, "sm", stats.deadline_density.qui > 2 ? "danger" : stats.deadline_density.qui > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Sex", "small"), Tag("" + stats.deadline_density.sex, null, "sm", stats.deadline_density.sex > 2 ? "danger" : stats.deadline_density.sex > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Sab", "small"), Tag("" + stats.deadline_density.sab, null, "sm", stats.deadline_density.sab > 2 ? "danger" : stats.deadline_density.sab > 0 ? "warning" : "neutral")], "column", "s", "center"),
+  Stack([TextContent("Dom", "small"), Tag("" + stats.deadline_density.dom, null, "sm", stats.deadline_density.dom > 2 ? "danger" : stats.deadline_density.dom > 0 ? "warning" : "neutral")], "column", "s", "center")
+], "row", "m", "end", "between")
+densityCard = Card([CardHeader("Prazo esta semana"), densityRow], "card", "column", "m")
 
-editStatusSelect = FormControl("Novo Status", Select("editStatus", [SelectItem("pendente", "Pendente"), SelectItem("concluido", "Concluído"), SelectItem("descartado", "Descartado")], null, null, $editStatus))
-saveBtn = Button("Salvar", Action([@Run(updateResult), @Run(activitiesQ), @Set($showEdit, false)]), "primary")
-cancelBtn = Button("Cancelar", Action([@Set($showEdit, false)]), "secondary")
-editForm = Form("editStatusForm", Buttons([saveBtn, cancelBtn]), [editStatusSelect])
-editModal = Modal("Alterar Status", $showEdit, [editForm])
+reviewCallout = @Count(pendingReview) > 0 ? Callout("warning", "Revisao pendente", "" + @Count(pendingReview) + " atividade(s) prontas para entrega — abra a atividade para revisar") : null
+needsMethodCallout = @Count(needsMethod) > 0 ? Callout("warning", "Como entregar?", "" + @Count(needsMethod) + " atividade(s) precisam de instrucoes de entrega") : null
 
-extractStatus = extractResult.status == "error" ? Callout("error", "Erro na extração", extractResult.error) : extractResult.status == "success" ? Callout("success", "Extração concluída", "Atividades: " + extractResult.data.activities_extracted + ". Mensagens processadas: " + extractResult.data.messages_processed + ". Tokens: " + extractResult.data.total_tokens_used) : null
+colPrazo = Col("Prazo", @Each(weekSorted, "a", Tag(a.urgency_label, null, "sm", a.urgency_color)))
+colAtiv = Col("Atividade", weekSorted.title)
+colEntrega = Col("Entrega", @Each(weekSorted, "a", Tag(a.delivery_stage, null, "sm", a.delivery_stage == "pending_review" ? "danger" : a.delivery_stage == "needs_method" ? "warning" : a.delivery_stage == "gathering" ? "info" : a.delivery_stage == "done" ? "success" : a.delivery_stage == "delivering" ? "info" : a.delivery_stage == "failed" ? "danger" : "neutral")))
+colAcoes = Col("Acoes", @Each(weekSorted, "a", Stack([Button("Feito", Action([@Set($reviewId, a.id), @Run(markDone), @Run(weekQ)]), "secondary", "normal", "extra-small"), Button("Revisar", Action([@Set($reviewId, a.id), @Set($reviewDraft, a.delivery_draft), @Set($reviewMethod, a.delivery_method), @Set($reviewCtx, a.delivery_context), @Set($showReview, true)]), "primary", "normal", "extra-small")], "row", "s")))
+weekTable = Table([colPrazo, colAtiv, colEntrega, colAcoes])
+weekEmpty = TextContent("Nenhuma atividade urgente esta semana.")
+weekSection = Card([CardHeader("Esta Semana"), @Count(weekSorted) > 0 ? weekTable : weekEmpty], "card", "column", "m")
 
-root = Stack([header, kpiRow, filterRow, tableSection, extractStatus, editModal])
+futureItems = @Each(futureSorted, "a", Card([Stack([TextContent(a.urgency_label + " — " + a.title, "small-heavy"), Tag(a.delivery_stage, null, "sm", a.delivery_stage == "pending_review" ? "danger" : a.delivery_stage == "needs_method" ? "warning" : "neutral")], "row", "s", "center", "between"), TextContent(a.description == null ? "" : a.description, "small")], "clear", "column", "s"))
+futureSection = @Count(futureSorted) > 0 ? Card([CardHeader("Mais Adiante"), Stack(futureItems, "column", "s")], "sunk", "column", "m") : null
+
+draftArea = FormControl("Rascunho", Input("reviewDraft", "Conteudo da submissao...", "text", null, $reviewDraft))
+methodInfo = TextContent("Metodo: " + $reviewMethod, "small")
+guidanceArea = $showGuidance ? FormControl("Orientacao", Input("guidanceText", "Explique como entregar...", "text", null, $guidanceText)) : null
+approveBtn = Button("Aprovar e Entregar", Action([@Run(updateDelivery), @Set($showReview, false), @Run(weekQ), @Run(reviewQ)]), "primary")
+regenBtn = Button("Regenerar", Action([@Run(regenDelivery), @Run(weekQ)]), "secondary")
+guidanceBtn = Button("Dar contexto", Action([@Set($showGuidance, true)]), "secondary")
+cancelBtn = Button("Cancelar", Action([@Set($showReview, false)]), "secondary")
+reviewForm = Form("reviewForm", Buttons([approveBtn, regenBtn, guidanceBtn, cancelBtn]), [draftArea, $showGuidance ? guidanceArea : null])
+reviewModal = Modal("Revisar entrega", $showReview, [methodInfo, reviewForm])
+
+root = Stack([header, briefingCard, densityCard, reviewCallout, needsMethodCallout, weekSection, futureSection, reviewModal])
 `;
 
 export function Dashboard() {
