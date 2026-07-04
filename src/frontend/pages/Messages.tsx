@@ -15,11 +15,12 @@ sorted = @Sort(messagesQ.data, "timestamp", "desc")
 searchBox = FormControl("Buscar", Input("search", "Buscar mensagens por autor ou conteúdo...", "text", null, $search))
 countLabel = TextContent("" + @Count(sorted) + " mensagem(ns)", "small")
 
-feedList = Stack(@Each(sorted, "m", Card([Stack([TextContent(m.author, "small-heavy"), TextContent(m.timestamp, "small"), Tag(m.group_label, null, "sm", m.group_label == "profs" ? "warning" : "info")], "row", "s", "center"), TextContent(m.body == null ? "[Mensagem vazia]" : m.body), Stack([Tag(m.processed == 1 ? "Processada" : "Não processada", null, "sm", m.processed == 1 ? "success" : "warning"), TextContent("ID: " + m.id + " (WA: " + m.wa_message_id + ")", "small")], "row", "s", "center")], "clear", "column", "s")), "column", "m")
+feedList = Stack(@Each(sorted, "m", Card([Stack([TextContent(m.author, "small-heavy"), TextContent(m.timestamp, "small"), Tag(m.group_label, null, "sm", m.group_label == "profs" ? "warning" : "info"), m.activity_count > 0 ? Tag("" + m.activity_count + " atividade(s)", null, "sm", "info") : TextContent("")], "row", "s", "center"), TextContent(m.body == null ? "[Mensagem vazia]" : m.body), Stack([Tag(m.processed == 1 ? "Processada" : "Não processada", null, "sm", m.processed == 1 ? "success" : "warning")], "row", "s", "center")], "clear", "column", "s")), "column", "m")
 
 emptyState = @Count(sorted) > 0 ? feedList : TextContent("Nenhuma mensagem encontrada.")
 
-root = Stack([CardHeader("Mensagens", "Feed de mensagens dos grupos do WhatsApp"), searchBox, countLabel, emptyState])
+contentContainer = Stack([CardHeader("Mensagens", "Feed de mensagens dos grupos do WhatsApp"), searchBox, countLabel, emptyState], "column", "m")
+root = Card([contentContainer], "card")
 `;
 
 export function Messages() {
