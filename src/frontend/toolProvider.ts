@@ -10,22 +10,23 @@ async function getJson(url: string): Promise<unknown> {
 
 export const toolProvider: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
   get_activities: async (args) => {
-    const status = String(args.status ?? 'all');
     const url = new URL('/api/activities', window.location.origin);
-    if (status !== 'all') url.searchParams.set('status', status);
+    if (args.status && args.status !== 'all') url.searchParams.set('status', String(args.status));
+    if (args.urgency) url.searchParams.set('urgency', String(args.urgency));
     url.searchParams.set('limit', '1000');
     return getJson(url.toString());
   },
 
   get_messages: async (args) => {
-    const search = String(args.search ?? '');
     const url = new URL('/api/messages', window.location.origin);
-    if (search) url.searchParams.set('search', search);
+    if (args.search) url.searchParams.set('search', String(args.search));
     url.searchParams.set('limit', '1000');
     return getJson(url.toString());
   },
 
   get_stats: async () => getJson('/api/stats'),
+  get_briefing: async () => getJson('/api/briefing'),
+  get_extractions: async () => getJson('/api/extractions'),
 
   update_activity_status: async (args) => {
     const response = await fetch(`/api/activities/${args.id}`, {
@@ -34,6 +35,30 @@ export const toolProvider: Record<string, (args: Record<string, unknown>) => Pro
       body: JSON.stringify({ status: args.status }),
     });
     if (!response.ok) throw new Error(`Update failed: ${response.status}`);
+    return response.json();
+  },
+
+  update_activity_delivery: async (args) => {
+    const response = await fetch(`/api/activities/${args.id}/delivery`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        delivery_method: args.delivery_method,
+        delivery_instructions: args.delivery_instructions,
+        delivery_draft: args.delivery_draft,
+        action: args.action,
+      }),
+    });
+    if (!response.ok) throw new Error(`Delivery update failed: ${response.status}`);
+    return response.json();
+  },
+
+  deliver_activity: async (args) => {
+    const response = await fetch(`/api/activities/${args.id}/deliver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Deliver failed: ${response.status}`);
     return response.json();
   },
 
