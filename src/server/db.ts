@@ -316,7 +316,21 @@ export function markOutgoingSent(id: number): void {
 }
 
 export function fetchActivitiesForBriefing(): ActivityWithDelivery[] {
-  return fetchActivities('pendente', undefined, 200).filter((a) => a.is_graded === 1);
+  const database = openDb();
+  const rows = database.prepare(`
+    SELECT a.*,
+           m.group_label, m.author, m.timestamp as message_timestamp,
+           CAST(ROUND(julianday(a.due_date) - julianday('now', 'localtime')) AS INTEGER) as days_until_due
+    FROM activities a
+    LEFT JOIN messages m ON a.source_message_id = m.id
+    WHERE a.status = 'pendente' AND a.is_graded = 1
+    ORDER BY a.due_date ASC
+    LIMIT 200
+  `).all() as any[];
+  return rows.map((row) => {
+    const { urgency_label, urgency_color } = computeUrgency(row.days_until_due, row.due_date);
+    return { ...row, urgency_label, urgency_color } as ActivityWithDelivery;
+  });
 }
 
 export function fetchWeekDensity(): Record<string, number> {
