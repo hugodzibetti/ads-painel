@@ -123,17 +123,18 @@ client.on('disconnected', (reason: string) => {
 
 function startOutgoingPoller(): void {
   setInterval(async () => {
-    try {
-      const pending = fetchPendingOutgoing();
-      for (const msg of pending) {
+    const pending = fetchPendingOutgoing();
+    for (const msg of pending) {
+      try {
         const groupId = Object.entries(groupIdToLabel).find(([, label]) => label === msg.group_label)?.[0];
         if (!groupId) { console.warn(`[Bot] No group ID for label "${msg.group_label}"`); continue; }
         await client.sendMessage(groupId, msg.body);
         markOutgoingSent(msg.id!);
         console.log(`[Bot] Sent outgoing message ${msg.id} to ${msg.group_label}`);
+      } catch (err: any) {
+        console.error(`[Bot] Failed to send outgoing message ${msg.id}, draining from queue:`, err.message);
+        markOutgoingSent(msg.id!);
       }
-    } catch (err: any) {
-      console.error('[Bot] Outgoing poller error:', err.message);
     }
   }, 30000);
 }

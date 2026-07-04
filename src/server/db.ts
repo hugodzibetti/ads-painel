@@ -251,15 +251,15 @@ export function fetchActivities(status?: string, urgency?: string, limit: number
   let query = `
     SELECT a.*,
            m.group_label, m.author, m.timestamp as message_timestamp,
-           CAST(ROUND(julianday(a.due_date) - julianday('now', 'localtime')) AS INTEGER) as days_until_due
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
     FROM activities a
     LEFT JOIN messages m ON a.source_message_id = m.id
     WHERE 1=1
   `;
   const params: any[] = [];
   if (status) { query += ' AND a.status = ?'; params.push(status); }
-  if (urgency === 'urgent') { query += ' AND ROUND(julianday(a.due_date) - julianday(\'now\', \'localtime\')) <= 7'; }
-  if (urgency === 'future') { query += ' AND ROUND(julianday(a.due_date) - julianday(\'now\', \'localtime\')) > 7'; }
+  if (urgency === 'urgent') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) <= 7'; }
+  if (urgency === 'future') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) > 7'; }
   query += ' ORDER BY a.due_date ASC LIMIT ?';
   params.push(limit);
 
@@ -320,7 +320,25 @@ export function fetchActivitiesForBriefing(): ActivityWithDelivery[] {
   const rows = database.prepare(`
     SELECT a.*,
            m.group_label, m.author, m.timestamp as message_timestamp,
-           CAST(ROUND(julianday(a.due_date) - julianday('now', 'localtime')) AS INTEGER) as days_until_due
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
+    FROM activities a
+    LEFT JOIN messages m ON a.source_message_id = m.id
+    WHERE a.status = 'pendente' AND a.is_graded = 1
+    ORDER BY a.due_date ASC
+    LIMIT 200
+  `).all() as any[];
+  return rows.map((row) => {
+    const { urgency_label, urgency_color } = computeUrgency(row.days_until_due, row.due_date);
+    return { ...row, urgency_label, urgency_color } as ActivityWithDelivery;
+  });
+}
+
+export function fetchActivitiesForDrafting(): ActivityWithDelivery[] {
+  const database = openDb();
+  const rows = database.prepare(`
+    SELECT a.*,
+           m.group_label, m.author, m.timestamp as message_timestamp,
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
     FROM activities a
     LEFT JOIN messages m ON a.source_message_id = m.id
     WHERE a.status = 'pendente' AND a.is_graded = 1

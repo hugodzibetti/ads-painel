@@ -1,5 +1,5 @@
 import { chat } from './llm.js';
-import { fetchActivities, updateActivityDelivery } from './db.js';
+import { fetchActivities, fetchActivitiesForDrafting, updateActivityDelivery } from './db.js';
 import type { ActivityWithDelivery } from './db.js';
 
 const DRAFT_SYSTEM = `Você prepara submissões acadêmicas. Com base na descrição da atividade, contexto coletado do WhatsApp e método de entrega, gere o conteúdo da submissão.
@@ -16,9 +16,9 @@ function daysUntilDate(dateStr: string): number {
 }
 
 export async function checkAndDraftSubmissions(): Promise<void> {
-  const activities = fetchActivities('pendente') as ActivityWithDelivery[];
+  const activities = fetchActivitiesForDrafting();
   const toProcess = activities.filter(
-    (a) => a.is_graded === 1 && a.delivery_stage === 'gathering' && daysUntilDate(a.due_date) <= 3
+    (a) => a.delivery_stage === 'gathering' && daysUntilDate(a.due_date) <= 3
   );
 
   for (const activity of toProcess) {
