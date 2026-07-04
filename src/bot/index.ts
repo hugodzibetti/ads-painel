@@ -1,7 +1,7 @@
 import { Client, LocalAuth, MessageTypes } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import 'dotenv/config';
-import { insertMessage, openDb } from '../server/db.js';
+import { insertMessage, openDb, fetchPendingOutgoing, markOutgoingSent } from '../server/db.js';
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'ads-painel-bot' }),
@@ -46,6 +46,7 @@ client.on('ready', async () => {
   groupIdToLabel[profsGroupId] = 'profs';
 
   console.log('\n[Bot] Listening for messages...');
+  startOutgoingPoller();
 });
 
 client.on('message', async (message: any) => {
@@ -119,6 +120,24 @@ client.on('disconnected', (reason: string) => {
   console.error('[WhatsApp] Disconnected:', reason);
   process.exit(1);
 });
+
+function startOutgoingPoller(): void {
+  setInterval(async () => {
+    const pending = fetchPendingOutgoing();
+    for (const msg of pending) {
+      try {
+        const groupId = Object.entries(groupIdToLabel).find(([, label]) => label === msg.group_label)?.[0];
+        if (!groupId) { console.warn(`[Bot] No group ID for label "${msg.group_label}"`); continue; }
+        await client.sendMessage(groupId, msg.body);
+        markOutgoingSent(msg.id!);
+        console.log(`[Bot] Sent outgoing message ${msg.id} to ${msg.group_label}`);
+      } catch (err: any) {
+        console.error(`[Bot] Failed to send outgoing message ${msg.id}, draining from queue:`, err.message);
+        markOutgoingSent(msg.id!);
+      }
+    }
+  }, 30000);
+}
 
 // Initialize the WhatsApp client
 client.initialize();

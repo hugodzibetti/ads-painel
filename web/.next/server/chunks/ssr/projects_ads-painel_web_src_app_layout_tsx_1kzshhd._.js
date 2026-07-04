@@ -1,3 +1,0 @@
-module.exports=[79843,a=>{"use strict";var b=a.i(93193);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"pt-BR",children:(0,b.jsx)("body",{className:"min-h-screen bg-[#FAFAF9] text-[#27272A]",children:a})})},"metadata",0,{title:"Ads Painel",description:"Acompanhe prazos da turma de ADS extraídos automaticamente das mensagens do WhatsApp."}])},18259,a=>{a.n(a.i(79843))}];
-
-//# sourceMappingURL=projects_ads-painel_web_src_app_layout_tsx_1kzshhd._.js.map

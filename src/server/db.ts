@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -49,11 +49,65 @@ export interface UsageSummary {
   last_run_at: string | null;
 }
 
+export interface ActivityWithDelivery extends Activity {
+  is_graded: number;
+  delivery_method: string | null;
+  delivery_url: string | null;
+  delivery_instructions: string | null;
+  delivery_context: string | null;
+  delivery_draft: string | null;
+  delivery_stage: string;
+  days_until_due: number;
+  urgency_label: string;
+  urgency_color: string;
+}
+
+export interface Briefing {
+  id?: number;
+  content: string;
+  created_at: string;
+  activities_count: number;
+}
+
+export interface KnowledgeBase {
+  id?: number;
+  content: string;
+  generated_at: string;
+  messages_read: number;
+}
+
+export interface OutgoingMessage {
+  id?: number;
+  group_label: string;
+  body: string;
+  activity_id: number | null;
+  status: string;
+  created_at: string;
+  sent_at: string | null;
+}
+
+export function runMigrations(database: Database.Database): void {
+  const actCols = (database.prepare('PRAGMA table_info(activities)').all() as any[]).map((c: any) => c.name);
+  const addAct = (col: string, def: string) => {
+    if (!actCols.includes(col)) database.exec(`ALTER TABLE activities ADD COLUMN ${col} ${def}`);
+  };
+  addAct('is_graded', 'INTEGER DEFAULT 1');
+  addAct('delivery_method', 'TEXT');
+  addAct('delivery_url', 'TEXT');
+  addAct('delivery_instructions', 'TEXT');
+  addAct('delivery_context', 'TEXT');
+  addAct('delivery_draft', 'TEXT');
+  addAct('delivery_stage', "TEXT DEFAULT 'detecting'");
+
+  const usageCols = (database.prepare('PRAGMA table_info(llm_usage)').all() as any[]).map((c: any) => c.name);
+  if (!usageCols.includes('run_id')) database.exec('ALTER TABLE llm_usage ADD COLUMN run_id TEXT');
+}
+
 let db: Database.Database | null = null;
 
 function getDbPath(): string {
   const dbPath = process.env.DB_PATH || './data/app.db';
-  const repoRoot = resolve(__dirname, '../../..');
+  const repoRoot = resolve(__dirname, '../../');
   if (dbPath.startsWith('./')) {
     return resolve(repoRoot, dbPath);
   }
@@ -69,9 +123,8 @@ export function openDb(): Database.Database {
   const dir = dirname(dbPath);
 
   // Ensure directory exists
-  const fs = require('fs');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
   }
 
   db = new Database(dbPath, { timeout: 5000 });
@@ -79,9 +132,10 @@ export function openDb(): Database.Database {
   db.pragma('busy_timeout = 5000');
 
   // Initialize schema
-  const schemaPath = resolve(__dirname, '../../..', 'shared', 'schema.sql');
+  const schemaPath = resolve(__dirname, '../../', 'shared', 'schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
+  runMigrations(db);
 
   return db;
 }
@@ -108,7 +162,7 @@ export function insertMessage(
     `);
     stmt.run(waMessageId, groupLabel, author, body, timestamp);
   } catch (err: any) {
-    if (err.code === 'SQLITE_CONSTRAINT') {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       // Message already exists, silently skip
     } else {
       throw err;
@@ -179,30 +233,160 @@ export function insertActivities(activities: Activity[]): number[] {
   return insertedIds;
 }
 
-export function fetchActivities(status?: string, limit: number = 500): Activity[] {
-  const database = openDb();
-  let stmt;
-
-  if (status) {
-    stmt = database.prepare(`
-      SELECT a.*, m.group_label, m.author, m.timestamp as message_timestamp
-      FROM activities a
-      LEFT JOIN messages m ON a.source_message_id = m.id
-      WHERE a.status = ?
-      ORDER BY a.due_date ASC
-      LIMIT ?
-    `);
-    return stmt.all(status, limit) as Activity[];
-  } else {
-    stmt = database.prepare(`
-      SELECT a.*, m.group_label, m.author, m.timestamp as message_timestamp
-      FROM activities a
-      LEFT JOIN messages m ON a.source_message_id = m.id
-      ORDER BY a.due_date ASC
-      LIMIT ?
-    `);
-    return stmt.all(limit) as Activity[];
+function computeUrgency(daysUntilDue: number, dueDateStr: string): { urgency_label: string; urgency_color: string } {
+  if (daysUntilDue < 0) return { urgency_label: 'VENCIDO', urgency_color: 'danger' };
+  if (daysUntilDue === 0) return { urgency_label: 'HOJE', urgency_color: 'danger' };
+  if (daysUntilDue === 1) return { urgency_label: 'AMANHÃ', urgency_color: 'warning' };
+  if (daysUntilDue <= 7) {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const d = new Date(dueDateStr + 'T12:00:00');
+    return { urgency_label: days[d.getDay()], urgency_color: 'info' };
   }
+  const [, month, day] = dueDateStr.split('-');
+  return { urgency_label: `${day}/${month}`, urgency_color: 'neutral' };
+}
+
+export function fetchActivities(status?: string, urgency?: string, limit: number = 500): ActivityWithDelivery[] {
+  const database = openDb();
+  let query = `
+    SELECT a.*,
+           m.group_label, m.author, m.timestamp as message_timestamp,
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
+    FROM activities a
+    LEFT JOIN messages m ON a.source_message_id = m.id
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+  if (status) { query += ' AND a.status = ?'; params.push(status); }
+  if (urgency === 'urgent') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) <= 7'; }
+  if (urgency === 'future') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) > 7'; }
+  query += ' ORDER BY a.due_date ASC LIMIT ?';
+  params.push(limit);
+
+  const rows = database.prepare(query).all(...params) as any[];
+  return rows.map((row) => {
+    const { urgency_label, urgency_color } = computeUrgency(row.days_until_due, row.due_date);
+    return { ...row, urgency_label, urgency_color } as ActivityWithDelivery;
+  });
+}
+
+export function updateActivityDelivery(activityId: number, fields: Partial<Pick<ActivityWithDelivery, 'is_graded' | 'delivery_method' | 'delivery_url' | 'delivery_instructions' | 'delivery_draft' | 'delivery_stage'>>): void {
+  const database = openDb();
+  const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return;
+  const setClauses = entries.map(([k]) => `${k} = ?`).join(', ');
+  const values = entries.map(([, v]) => v);
+  database.prepare(`UPDATE activities SET ${setClauses} WHERE id = ?`).run(...values, activityId);
+}
+
+export function appendActivityContext(activityId: number, item: { message_id: number; author: string; body: string; timestamp: string }): void {
+  const database = openDb();
+  const row = database.prepare('SELECT delivery_context FROM activities WHERE id = ?').get(activityId) as any;
+  const existing: any[] = row?.delivery_context ? JSON.parse(row.delivery_context) : [];
+  existing.push(item);
+  database.prepare('UPDATE activities SET delivery_context = ? WHERE id = ?').run(JSON.stringify(existing), activityId);
+}
+
+export function insertBriefing(content: string, activitiesCount: number): void {
+  openDb().prepare('INSERT INTO briefings (content, activities_count, created_at) VALUES (?, ?, ?)').run(content, activitiesCount, new Date().toISOString());
+}
+
+export function fetchLatestBriefing(): Briefing | null {
+  return (openDb().prepare('SELECT * FROM briefings ORDER BY created_at DESC LIMIT 1').get() as Briefing | undefined) ?? null;
+}
+
+export function insertKnowledgeBase(content: string, messagesRead: number): void {
+  openDb().prepare('INSERT INTO knowledge_base (content, messages_read, generated_at) VALUES (?, ?, ?)').run(content, messagesRead, new Date().toISOString());
+}
+
+export function fetchLatestKnowledgeBase(): KnowledgeBase | null {
+  return (openDb().prepare('SELECT * FROM knowledge_base ORDER BY generated_at DESC LIMIT 1').get() as KnowledgeBase | undefined) ?? null;
+}
+
+export function insertOutgoingMessage(groupLabel: string, body: string, activityId: number | null): void {
+  openDb().prepare('INSERT INTO outgoing_messages (group_label, body, activity_id) VALUES (?, ?, ?)').run(groupLabel, body, activityId);
+}
+
+export function fetchPendingOutgoing(): OutgoingMessage[] {
+  return openDb().prepare("SELECT * FROM outgoing_messages WHERE status = 'pending' ORDER BY created_at ASC LIMIT 10").all() as OutgoingMessage[];
+}
+
+export function markOutgoingSent(id: number): void {
+  openDb().prepare("UPDATE outgoing_messages SET status = 'sent', sent_at = ? WHERE id = ?").run(new Date().toISOString(), id);
+}
+
+export function fetchActivitiesForBriefing(): ActivityWithDelivery[] {
+  const database = openDb();
+  const rows = database.prepare(`
+    SELECT a.*,
+           m.group_label, m.author, m.timestamp as message_timestamp,
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
+    FROM activities a
+    LEFT JOIN messages m ON a.source_message_id = m.id
+    WHERE a.status = 'pendente' AND a.is_graded = 1
+    ORDER BY a.due_date ASC
+    LIMIT 200
+  `).all() as any[];
+  return rows.map((row) => {
+    const { urgency_label, urgency_color } = computeUrgency(row.days_until_due, row.due_date);
+    return { ...row, urgency_label, urgency_color } as ActivityWithDelivery;
+  });
+}
+
+export function fetchActivitiesForDrafting(): ActivityWithDelivery[] {
+  const database = openDb();
+  const rows = database.prepare(`
+    SELECT a.*,
+           m.group_label, m.author, m.timestamp as message_timestamp,
+           CAST(ROUND(julianday(DATE(a.due_date)) - julianday(DATE('now', 'localtime'))) AS INTEGER) as days_until_due
+    FROM activities a
+    LEFT JOIN messages m ON a.source_message_id = m.id
+    WHERE a.status = 'pendente' AND a.is_graded = 1
+    ORDER BY a.due_date ASC
+    LIMIT 200
+  `).all() as any[];
+  return rows.map((row) => {
+    const { urgency_label, urgency_color } = computeUrgency(row.days_until_due, row.due_date);
+    return { ...row, urgency_label, urgency_color } as ActivityWithDelivery;
+  });
+}
+
+export function fetchWeekDensity(): Record<string, number> {
+  const database = openDb();
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const mondayStr = monday.toISOString().slice(0, 10);
+
+  const rows = database.prepare(`
+    SELECT due_date, COUNT(*) as count
+    FROM activities
+    WHERE is_graded = 1 AND status = 'pendente'
+      AND due_date >= ? AND due_date <= date(?, '+6 days')
+    GROUP BY due_date
+  `).all(mondayStr, mondayStr) as any[];
+
+  const labels = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+  const density: Record<string, number> = { seg: 0, ter: 0, qua: 0, qui: 0, sex: 0, sab: 0, dom: 0 };
+  for (const row of rows) {
+    const d = new Date(row.due_date + 'T12:00:00');
+    const idx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    density[labels[idx]] = row.count;
+  }
+  return density;
+}
+
+export function fetchExtractionRuns(limit: number = 20): any[] {
+  return openDb().prepare(`
+    SELECT run_id, MIN(timestamp) as started_at,
+           SUM(prompt_tokens) as prompt_tokens,
+           SUM(completion_tokens) as completion_tokens,
+           SUM(messages_in_batch) as messages_in_batch,
+           COUNT(*) as batch_count
+    FROM llm_usage WHERE run_id IS NOT NULL
+    GROUP BY run_id ORDER BY started_at DESC LIMIT ?
+  `).all(limit) as any[];
 }
 
 export function updateActivityStatus(activityId: number, status: string): void {
@@ -311,20 +495,13 @@ export function insertLLMUsage(
   model: string,
   promptTokens: number,
   completionTokens: number,
-  messagesInBatch: number
+  messagesInBatch: number,
+  runId?: string
 ): void {
-  const database = openDb();
-  const stmt = database.prepare(`
-    INSERT INTO llm_usage (timestamp, model, prompt_tokens, completion_tokens, messages_in_batch)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  stmt.run(
-    new Date().toISOString(),
-    model,
-    promptTokens,
-    completionTokens,
-    messagesInBatch
-  );
+  openDb().prepare(`
+    INSERT INTO llm_usage (timestamp, model, prompt_tokens, completion_tokens, messages_in_batch, run_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(new Date().toISOString(), model, promptTokens, completionTokens, messagesInBatch, runId ?? null);
 }
 
 export function fetchUsageSummary(since?: string): UsageSummary {

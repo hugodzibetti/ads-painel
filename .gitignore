@@ -10,6 +10,7 @@ venv/
 dist/
 build/
 *.tsbuildinfo
+coverage/
 
 # Database
 data/*.db
@@ -49,3 +50,4 @@ __pycache__/
 *.log
 *.tmp
 /tmp
+.worktrees/

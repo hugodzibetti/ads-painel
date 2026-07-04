@@ -8,7 +8,7 @@ MVP that captures messages from two WhatsApp groups (ADS student class), extract
 
 - **`src/bot/index.ts`**: WhatsApp listener via `whatsapp-web.js`, writes raw messages to SQLite
 - **`src/server/`**: Express API server (extraction, database, stats endpoints)
-- **`src/frontend/`**: Vanilla OpenUI web interface (Dashboard, Messages, Status pages)
+- **`src/frontend/`**: React + `@openuidev/react-lang`/`@openuidev/react-ui` interface (Dashboard, Messages, Status pages), each page an OpenUI Lang program rendered by `<Renderer>`
 - **`shared/schema.sql`**: SQLite schema (messages, activities tables)
 
 ## Commands
@@ -44,7 +44,7 @@ No lint/typecheck config — don't invent one.
 2. Messages are tagged with `group_label` (`'alunos'` or `'profs'`) and inserted via `src/server/db.ts:insertMessage()` into SQLite `messages` table. Non-text types (`image`, `video`, etc.) stored as `[type]` placeholder with no transcription (out of scope).
 3. Dashboard "Atualizar" button triggers `POST /api/extract` → `src/server/extraction.ts:runExtraction()` on-demand (no background polling).
 4. `runExtraction()` pulls unprocessed messages in batches of 30, max 10 batches/call (300 msg cap per click). For each batch: builds prompt via `src/server/prompts.ts`, calls OpenCode LLM, validates/dedups results, atomically inserts `activities` + marks batch `processed=1`. Invalid JSON or missing `source_message_id` still marks batch processed to avoid reprocessing loops.
-5. Frontend fetches activities via `GET /api/activities`, messages via `GET /api/messages`, stats via `GET /api/stats`. All pages use vanilla OpenUI components.
+5. Each frontend page (`src/frontend/pages/*.tsx`) defines an OpenUI Lang program string with `Query("get_activities"|"get_messages"|"get_stats", ...)` / `Mutation("update_activity_status"|"run_extraction", ...)` statements. `<Renderer>` executes these against `src/frontend/toolProvider.ts`, which maps each tool name to a real `fetch` call against the Express API — no LLM is involved in rendering these pages; `$variables` and `@Filter`/`@Sort`/`@Each` builtins handle client-side filtering/sorting/interactivity (see OpenUI Lang docs at openui.com for the DSL).
 
 ### Why one feed with a `group_label` instead of two pipelines
 `profs` group (official announcements) is more authoritative than `alunos` (rumors). Both feed the same extraction pass, each line tagged `[id=N][group_label]` so LLM can weigh conflicts. Dedups reposts across groups.

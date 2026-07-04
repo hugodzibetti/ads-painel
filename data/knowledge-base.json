@@ -1,0 +1,428 @@
+{
+  "university": "FASIPE - Sinop, MT",
+  "course": "ADS - Análise e Desenvolvimento de Sistemas",
+  "professors": [
+    {
+      "name": "Thiago Sauer Land",
+      "subjects": [
+        "Introdução a Tecnologia Digital",
+        "Metodologia para Elaboração de Projetos em TI"
+      ],
+      "delivery_patterns": [
+        "Google Forms",
+        "Aulas presenciais",
+        "Compartilhamento de links no grupo"
+      ],
+      "announcement_style": "Comunicados formais com editais e prazos, e tom informal em interações diárias.",
+      "notes": "Coordenador do curso. Ministra Introdução a Tecnologia Digital e provalvemente Metodologia."
+    },
+    {
+      "name": "Maysa",
+      "subjects": [
+        "Computational Thinking",
+        "Lógica e Matemática Computacional"
+      ],
+      "delivery_patterns": [
+        "WhatsApp (recebimento de atividades)",
+        "Slides e PDFs"
+      ],
+      "announcement_style": "Posta materiais, gabaritos e prazos; às vezes prazos são alterados.",
+      "notes": "Professora de Pensamento Computacional e Lógica. Utiliza muitos exercícios práticos."
+    },
+    {
+      "name": "Mônica da Silva",
+      "subjects": [
+        "Interface e Usabilidade de Hardware e Software"
+      ],
+      "delivery_patterns": [
+        "Google Forms (avaliação de protótipos)",
+        "Google Drive (materiais)",
+        "Apresentação presencial"
+      ],
+      "announcement_style": "Clara e objetiva, com uso de formulários e drives.",
+      "notes": "Disciplina com projeto de protótipo e avaliação de usabilidade."
+    },
+    {
+      "name": "David Alves",
+      "subjects": [
+        "Front-end Design Engineering"
+      ],
+      "delivery_patterns": [
+        "GitHub (código e materiais)",
+        "Netlify (deploy)",
+        "Google Forms"
+      ],
+      "announcement_style": "Disponibiliza materiais no GitHub e comunica pelo grupo.",
+      "notes": "Professor de Front-end. Atividades envolvem criação de sites e consumo de APIs."
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Computational Thinking",
+      "professor": "Maysa",
+      "typical_activities": [
+        "Exercícios de lógica",
+        "Pseudocódigo",
+        "Vetores e matrizes",
+        "Atividades de fixação"
+      ],
+      "delivery_method": "WhatsApp (enviar para professora)",
+      "notes": "Atividades frequentes e curtas.",
+      "official_name": "Computational Thinking",
+      "semester": 1,
+      "hours": 60
+    },
+    {
+      "name": "Lógica e Matemática Computacional",
+      "professor": "Maysa",
+      "typical_activities": [
+        "Fatorial",
+        "Probabilidade",
+        "Análise combinatória"
+      ],
+      "delivery_method": "WhatsApp (enviar para professora)",
+      "notes": "Conteúdo matemático com muitos exercícios.",
+      "official_name": "Lógica e Matemática Computacional",
+      "semester": 1,
+      "hours": 30
+    },
+    {
+      "name": "Interface e Usabilidade de Hardware e Software",
+      "professor": "Mônica da Silva",
+      "typical_activities": [
+        "Criação de protótipo",
+        "Avaliação de usabilidade (heurísticas de Nielsen)",
+        "Pesquisa com formulários"
+      ],
+      "delivery_method": "Google Forms e apresentação presencial",
+      "notes": "Inclui atividade extensionista.",
+      "official_name": "Interface e Usabilidade de Hardware e Sofware",
+      "semester": 1,
+      "hours": 60
+    },
+    {
+      "name": "Introdução a Tecnologia Digital",
+      "professor": "Thiago Sauer Land",
+      "typical_activities": [
+        "Apresentação sobre malwares",
+        "Classificação de modelos de processamento",
+        "Batalha de conhecimento"
+      ],
+      "delivery_method": "Aulas presenciais e prova integrada",
+      "notes": "",
+      "official_name": "Introdução a Orientação a Objetos",
+      "semester": 3,
+      "hours": 60
+    },
+    {
+      "name": "Metodologia para Elaboração de Projetos em TI",
+      "professor": "Thiago Sauer Land (provável)",
+      "typical_activities": [
+        "Elaboração de artigo científico",
+        "Projeto de pesquisa"
+      ],
+      "delivery_method": "Aulas presenciais e Google Docs",
+      "notes": "Professor não confirmado explicitamente.",
+      "official_name": "Metodologia para Elaboração de Projetos em TI",
+      "semester": 1,
+      "hours": 30
+    },
+    {
+      "name": "Front-end Design Engineering",
+      "professor": "David Alves",
+      "typical_activities": [
+        "Criação de página web",
+        "Integração com API",
+        "Deploy no Netlify"
+      ],
+      "delivery_method": "GitHub e Netlify",
+      "notes": "Atividade N3 com empresa fictícia e com empresa real (extensão).",
+      "official_name": "Front-end Design Engenharing",
+      "semester": 1,
+      "hours": 60
+    },
+    {
+      "name": "Atividades Curriculares Extensionistas I",
+      "professor": null,
+      "typical_activities": [],
+      "delivery_method": "",
+      "notes": "Disciplina extensionista encontrada apenas no portal do aluno (Mentor Web), não estava na base derivada do WhatsApp.",
+      "official_name": "Atividades Curriculares Extensionistas I - Análise e...",
+      "semester": 1,
+      "hours": null
+    }
+  ],
+  "students": [
+    {
+      "name": "Cadu",
+      "role": "Líder de turma (eleito)"
+    },
+    {
+      "name": "Ana Flávia",
+      "role": "Vice-líder"
+    },
+    {
+      "name": "Iverson",
+      "role": "Representante da atlética (tesoureiro?)"
+    },
+    {
+      "name": "Hugo",
+      "role": "Aluno ativo e organizador (criou Trello para tarefas)"
+    },
+    {
+      "name": "Gabriel Gregorius de Souza",
+      "role": "Candidato a líder"
+    },
+    {
+      "name": "Marcelo Werneck",
+      "role": "Membro da comissão organizadora do congresso"
+    },
+    {
+      "name": "Michael Wenzo",
+      "role": "Aluno ativo"
+    },
+    {
+      "name": "Christian",
+      "role": "Monitor na feira das profissões"
+    },
+    {
+      "name": "Miguel Arthur",
+      "role": "Monitor na feira das profissões"
+    },
+    {
+      "name": "Kaiky",
+      "role": "Monitor na feira das profissões"
+    },
+    {
+      "name": "Rayanne",
+      "role": "Membro da comissão da camisa e atlética"
+    },
+    {
+      "name": "Jonas",
+      "role": "Aluno ativo"
+    },
+    {
+      "name": "Gustavo",
+      "role": "Aluno ativo"
+    }
+  ],
+  "group_norms": {
+    "profs": "Usado para comunicados oficiais dos professores, materiais, prazos, e também discussões sobre organização de eventos da turma (atlética, batalha dos cursos). O coordenador e professores postam avisos e os alunos respondem.",
+    "alunos": "Usado para conversas entre alunos, dúvidas sobre atividades, organização de trabalhos, e também para humor e fofocas. Ocorre compartilhamento de dicas e informações não oficiais."
+  },
+  "delivery_patterns": {
+    "google_forms": "Utilizado por Thiago para inscrições em eventos (Fasipe Talk, Congresso) e por Mônica para avaliação de protótipos. Maysa usa para algumas atividades.",
+    "google_docs": "Usado por Thiago para compartilhar documentos oficiais, como currículo da turma e editais.",
+    "whatsapp": "Principal meio para dúvidas e entrega de atividades para Maysa (envio no privado). Grupo geral para avisos rápidos.",
+    "in_person": "Apresentações de trabalhos, provas e aulas práticas (laboratório) sempre presenciais.",
+    "email": "Pouco utilizado. Menção a emails institucionais para acesso a recursos estudantis (ex: JetBrains IDEs)."
+  },
+  "academic_calendar_notes": "Semestre 2026/1 com início em Fevereiro. N1 ocorreu em Abril, N2 em Maio (prova integrada com 40 questões), N3 em Junho (25/06 a 02/07). Eventos: Cerimônia do Pen Drive (30/04), Desconstruir (horas complementares), Fasipe Talk (adiado), Congresso de ADS (10-12/06), Celeiro Fest e Batalha dos Cursos (Junho). Sábados letivos para atividades extensionistas (220h). Horas complementares obrigatórias (160h). Nenhum calendário acadêmico 2026 oficial foi encontrado publicado no site da FASIPE nem no portal do aluno (módulo 'Calendário acadêmico' apareceu vazio em abr-jul/2026); o calendário 2024/2 (o mais recente público) confirma a estrutura N1/N2-PI/N3/Substitutiva/Exame Final usada acima.",
+  "communication_patterns": "Professores e alunos se comunicam principalmente via grupos de WhatsApp. As professores Maysa e Mônica usam formulários e drives. O coordenador Thiago faz comunicados formais e informais. Alunos usam o grupo alunos para discussões e o grupo profs para respostas a professores. A comunicação é mista entre formal e informal, com tom colaborativo.",
+  "ppc": {
+    "official_subjects": [
+      {
+        "name": "Computational Thinking",
+        "semester": 1,
+        "hours": 60
+      },
+      {
+        "name": "Interface e Usabilidade de Hardware e Sofware",
+        "semester": 1,
+        "hours": 60
+      },
+      {
+        "name": "Introdução a Tecnologia Digital",
+        "semester": 1,
+        "hours": 60
+      },
+      {
+        "name": "Lógica e Matemática Computacional",
+        "semester": 1,
+        "hours": 30
+      },
+      {
+        "name": "Metodologia para Elaboração de Projetos em TI",
+        "semester": 1,
+        "hours": 30
+      },
+      {
+        "name": "Front-end Design Engenharing",
+        "semester": 1,
+        "hours": 60
+      },
+      {
+        "name": "Arquitetura de Computadores",
+        "semester": 2,
+        "hours": 60
+      },
+      {
+        "name": "Estrutura de Dados e Organização de Arquivos",
+        "semester": 2,
+        "hours": 60
+      },
+      {
+        "name": "Linguagem de Programação",
+        "semester": 2,
+        "hours": 60
+      },
+      {
+        "name": "Gestão de Projetos e Desenvolvimento de Projetos em TI - PI I",
+        "semester": 2,
+        "hours": 100
+      },
+      {
+        "name": "Engenharia de Software",
+        "semester": 2,
+        "hours": 60
+      },
+      {
+        "name": "Análise de Requisitos e Prototipação de Hardware e Software",
+        "semester": 2,
+        "hours": 30
+      },
+      {
+        "name": "Banco de Dados",
+        "semester": 3,
+        "hours": 60
+      },
+      {
+        "name": "Introdução a Orientação a Objetos",
+        "semester": 3,
+        "hours": 60
+      },
+      {
+        "name": "Fundamentos de Redes de Computadores",
+        "semester": 3,
+        "hours": 60
+      },
+      {
+        "name": "Sistemas Operacionais e Virtualização de Datacenters",
+        "semester": 3,
+        "hours": 30
+      },
+      {
+        "name": "Computação Gráfica e Visão Computacional",
+        "semester": 3,
+        "hours": 60
+      },
+      {
+        "name": "Desenvolvimento de Projetos em TI - PI II",
+        "semester": 3,
+        "hours": 100
+      },
+      {
+        "name": "Tecnologia e TI - Disciplina Rotativa",
+        "semester": 4,
+        "hours": 30
+      },
+      {
+        "name": "Programação Orientada a Objetos",
+        "semester": 4,
+        "hours": 60
+      },
+      {
+        "name": "Mobile Developement",
+        "semester": 4,
+        "hours": 60
+      },
+      {
+        "name": "Gerenciamento de Redes Avançadas",
+        "semester": 4,
+        "hours": 60
+      },
+      {
+        "name": "DevOps & Cloud Computing",
+        "semester": 4,
+        "hours": 60
+      },
+      {
+        "name": "Desenvolvimento de Projetos em TI - PI III",
+        "semester": 4,
+        "hours": 120
+      },
+      {
+        "name": "Empreendedorismo e Modelagem de Negócios",
+        "semester": 5,
+        "hours": 60
+      },
+      {
+        "name": "Ética, Direitos Humanos e Legislação",
+        "semester": 5,
+        "hours": 30
+      },
+      {
+        "name": "Inteligência Artificial",
+        "semester": 5,
+        "hours": 30
+      },
+      {
+        "name": "Segurança Cibernética",
+        "semester": 5,
+        "hours": 60
+      },
+      {
+        "name": "Redes sem Fio e Comunicação Móvel",
+        "semester": 5,
+        "hours": 60
+      },
+      {
+        "name": "Desenvolvimento de Projetos em TI - IV",
+        "semester": 5,
+        "hours": 120
+      },
+      {
+        "name": "Robótica e Automação",
+        "semester": 5,
+        "hours": 30
+      }
+    ],
+    "course_structure": {
+      "total_semesters": 5,
+      "curriculum_hours": 1820,
+      "extension_hours": 220,
+      "complementary_hours": 160,
+      "total_hours": 2200
+    },
+    "evaluation_system": "N1, N2, N3 por semestre. Prova integrada (N2) com questões de todas as disciplinas."
+  },
+  "academic_standing": {
+    "source": "Portal do aluno FASIPE Mentor Web, página 'Notas e faltas' (2026-07-04, login do próprio aluno)",
+    "period": "1°ADS",
+    "results": [
+      { "subject": "Atividades Curriculares Extensionistas I", "status": "Cursando" },
+      { "subject": "Computational Thinking", "status": "Reprovado por Frequencia" },
+      { "subject": "Front-end Design Engenharing", "status": "Reprovado por Frequencia" },
+      { "subject": "Interface e Usabilidade de Hardware e Sofware", "status": "Cursando" },
+      { "subject": "Introdução a Tecnologia Digital", "status": "Cursando" },
+      { "subject": "Lógica e Matemática Computacional", "status": "Reprovado por Frequencia" },
+      { "subject": "Metodologia para Elaboração de Projetos em ...", "status": "Cursando" }
+    ],
+    "note": "3 disciplinas marcadas 'Reprovado por Frequencia' (reprovação por falta) — fato não presente na base derivada do WhatsApp; não confirmado se é lançamento definitivo ou preliminar."
+  },
+  "unresolved_conflicts": [
+    {
+      "topic": "Campus/unidade",
+      "conflict": "Base derivada do WhatsApp registra 'Sinop, MT'. Portal do aluno (Mentor Web) mostra a unidade do aluno como 'Faculdade Fasipe - Sorriso'.",
+      "status": "não resolvido"
+    },
+    {
+      "topic": "Coordenador do curso",
+      "conflict": "Base do WhatsApp indica Thiago Sauer Land como coordenador. Site oficial da FASIPE lista 'Willian Hübner'. Edital de exame ADS 2025/2 (assinado nov/2025) traz 'Cides Semprebom Bezerra'.",
+      "status": "não resolvido — nenhuma fonte oficial confirma Thiago Sauer Land como coordenador institucional"
+    }
+  ],
+  "web_research": {
+    "source_file": "docs/research/2026-07-03-fasipe-ads-research.md",
+    "institution_legal_name": "UNIFASIPE Centro Universitário (mantenedora: FASIPE Centro Educacional Ltda, Grupo Fasipe Educacional)",
+    "course_official_name": "Curso Superior de Tecnologia em Análise e Desenvolvimento de Sistemas",
+    "course_load_2017_ppc_hours": 2120,
+    "mec_cncst_minimum_hours": 2000,
+    "mec_cbo_codes": [
+      "2124-05 Tecnólogo em análise e desenvolvimento de sistemas",
+      "2124-05 Tecnólogo em processamento de dados"
+    ],
+    "assessment_model": "N1 (Trabalho + Prova), N2 (Prova Integrada), N3 (Trabalho + Prova), com 2ª chamada, prova substitutiva e exame final — datas definidas a cada semestre pelo Calendário Acadêmico vigente.",
+    "note": "Nenhum dos 4 professores conhecidos via WhatsApp (Thiago Sauer Land, Maysa, Mônica da Silva, David Alves) aparece em nenhum documento oficial encontrado (PPC 2017, editais, site institucional). Ver docs/research/2026-07-03-fasipe-ads-research.md para detalhes completos."
+  }
+}
