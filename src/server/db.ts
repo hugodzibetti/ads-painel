@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -53,7 +53,7 @@ let db: Database.Database | null = null;
 
 function getDbPath(): string {
   const dbPath = process.env.DB_PATH || './data/app.db';
-  const repoRoot = resolve(__dirname, '../../..');
+  const repoRoot = resolve(__dirname, '../../');
   if (dbPath.startsWith('./')) {
     return resolve(repoRoot, dbPath);
   }
@@ -69,9 +69,8 @@ export function openDb(): Database.Database {
   const dir = dirname(dbPath);
 
   // Ensure directory exists
-  const fs = require('fs');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
   }
 
   db = new Database(dbPath, { timeout: 5000 });
@@ -79,7 +78,7 @@ export function openDb(): Database.Database {
   db.pragma('busy_timeout = 5000');
 
   // Initialize schema
-  const schemaPath = resolve(__dirname, '../../..', 'shared', 'schema.sql');
+  const schemaPath = resolve(__dirname, '../../', 'shared', 'schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
 
@@ -108,7 +107,7 @@ export function insertMessage(
     `);
     stmt.run(waMessageId, groupLabel, author, body, timestamp);
   } catch (err: any) {
-    if (err.code === 'SQLITE_CONSTRAINT') {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       // Message already exists, silently skip
     } else {
       throw err;

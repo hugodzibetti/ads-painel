@@ -4,7 +4,6 @@ import 'dotenv/config';
 import {
   fetchActivities,
   fetchMessages,
-  fetchActivitiesCount,
   fetchActivityStatusCounts,
   fetchActivityTypeCounts,
   fetchMessageStats,

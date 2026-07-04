@@ -314,6 +314,43 @@ Only latest row is used. Re-generation appends a new row.
 ---
 
 ## 11. Out of Scope (Future)
+
+### Misc
 - Push/browser notifications for new extractions
 - Smart date re-evaluation for stale relative dates ("semana que vem" in old messages)
 - Multi-user support
+
+### University Website API Wrapper
+FASIPE has a public website. While it likely doesn't list individual activities, it may expose:
+- **Official academic calendar** (N1/N2/N3 dates, holidays, semester start/end) — high value: ground-truth dates for resolving relative date ambiguity in WhatsApp messages
+- **Course curriculum / subject list** — helps knowledge base stay accurate when professors or subjects change each semester
+- **Events and institutional notices** — seminars, extension hour opportunities, deadlines for enrollment
+- **Professor directory** — names, subjects taught — useful for bootstrapping the knowledge base without needing to scrape messages first
+
+**Approach**: lightweight scraper/wrapper in `src/server/website.ts`. Puppeteer or plain `fetch` + cheerio depending on whether the site requires JS rendering. Exposes clean typed objects consumed by the knowledge base generator and extraction pipeline.
+
+**Integration point**: `GET /api/website/sync` triggers a scrape → updates a `website_data` table → knowledge base generator can merge official calendar dates with WhatsApp-derived patterns. LLM prompt injection includes official calendar alongside knowledge base JSON.
+
+**Build when**: starting a new semester and the knowledge base needs refreshing, or when relative date resolution errors appear in extraction output.
+
+### Audio Class Transcription
+Record lectures in-person → transcribe → feed into extraction pipeline.
+
+**Approach**: Two-stage: STT → LLM extraction (same pipeline as WhatsApp messages).
+
+**Recommended STT**: Groq Whisper API (`whisper-large-v3-turbo`)
+- OpenAI-compatible client, same pattern as existing LLM calls
+- Excellent Portuguese accuracy; ~0.1x realtime factor (2h lecture ≈ 12min to transcribe)
+- Generous free tier; env var `GROQ_API_KEY` + `GROQ_BASE_URL=https://api.groq.com/openai/v1`
+
+**Alternative**: Local `faster-whisper` — free, no rate limits, needs decent CPU, works offline. Better for a full semester of recordings.
+
+**Integration plan** (when building):
+1. `scripts/transcribe.mjs` — accepts audio file path, calls Groq Whisper, returns transcript
+2. Transcript chunked by ~5min segments; each chunk inserted as a message with `group_label = 'aula'`, `author = 'Professor'` (or detected speaker name), `timestamp` derived from recording date + offset
+3. Normal extraction pipeline runs on these messages unchanged — no downstream changes needed
+4. UI: Status page Extrações tab shows `group_label = 'aula'` messages processed per run
+
+**Note on noise**: Whisper handles classroom noise (scraping chairs, side talk, mic angle) well, but some garbage lines are expected. The extraction LLM already filters noise from WhatsApp messages; same behavior applies here.
+
+**Trigger**: Manual (`node scripts/transcribe.mjs <file>`) is sufficient — recordings happen irregularly and the user controls when to process them.
