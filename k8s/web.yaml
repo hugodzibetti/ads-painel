@@ -26,6 +26,19 @@ spec:
           env:
             - name: HOSTNAME
               value: "0.0.0.0"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
           resources:
             requests:
               memory: "256Mi"

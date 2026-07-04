@@ -50,19 +50,25 @@ Extraia apenas atividades futuras com informação acionável. Se não houver at
 `;
 }
 
+const DAY_NAMES_PT = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+// Convert a UTC instant to São Paulo wall-clock via the IANA tz database, so the
+// result stays correct across any offset/DST rule change instead of a hardcoded -3.
+function formatSaoPaulo(d: Date): { date: string; time: string; dayNamePt: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {} as Record<string, string>);
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  const dow = new Date(Date.UTC(+parts.year, +parts.month - 1, +parts.day)).getUTCDay();
+  return { date, time: `${parts.hour}:${parts.minute}`, dayNamePt: DAY_NAMES_PT[dow] };
+}
+
 export function buildUserPrompt(messages: Message[]): string {
-  const timezoneOffset = -3; // São Paulo is UTC-3
-  const now = new Date();
+  const nowSp = formatSaoPaulo(new Date());
 
-  // Adjust for timezone (convert from UTC to São Paulo time)
-  const spTime = new Date(now.getTime() + timezoneOffset * 60 * 60 * 1000);
-
-  const date = spTime.toISOString().split('T')[0];
-  const dayOfWeek = spTime.getUTCDay();
-  const dayNamePt = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][dayOfWeek];
-  const time = spTime.toISOString().split('T')[1].substring(0, 5);
-
-  let prompt = `Data/hora atual: ${date} (${dayNamePt}), ${time}, America/Sao_Paulo.
+  let prompt = `Data/hora atual: ${nowSp.date} (${nowSp.dayNamePt}), ${nowSp.time}, America/Sao_Paulo.
 
 Analise as seguintes mensagens e extraia atividades acadêmicas:
 
@@ -72,8 +78,9 @@ Analise as seguintes mensagens e extraia atividades acadêmicas:
     let msgDtStr: string;
     try {
       const msgTs = new Date(msg.timestamp);
-      const msgTsLocal = new Date(msgTs.getTime() + timezoneOffset * 60 * 60 * 1000);
-      msgDtStr = msgTsLocal.toISOString().split('T')[0] + ' ' + msgTsLocal.toISOString().split('T')[1].substring(0, 5);
+      if (isNaN(msgTs.getTime())) throw new Error('invalid');
+      const sp = formatSaoPaulo(msgTs);
+      msgDtStr = `${sp.date} ${sp.time}`;
     } catch (err) {
       msgDtStr = `${msg.timestamp} (timestamp inválido)`;
     }

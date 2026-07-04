@@ -1,10 +1,16 @@
 import { Client, LocalAuth, MessageTypes } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
+import path from 'node:path';
 import 'dotenv/config';
 import { insertMessage, openDb, fetchPendingOutgoing, markOutgoingSent } from '../server/db.js';
 
+// Persist the WhatsApp session next to the DB (same PVC in k8s) so a pod/process
+// restart resumes without re-scanning the QR. Default LocalAuth path is the
+// ephemeral container layer, which is wiped on restart.
+const authDir = path.resolve(path.dirname(process.env.DB_PATH || './data/app.db'), '.wwebjs_auth');
+
 const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'ads-painel-bot' }),
+  authStrategy: new LocalAuth({ clientId: 'ads-painel-bot', dataPath: authDir }),
   puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] },
 });
 
@@ -114,6 +120,12 @@ client.on('disconnected', (reason: string) => {
   process.exit(1);
 });
 
+// Bounded in-memory retry: a transient send error leaves the row `pending` so the
+// next poll retries it, instead of silently dropping the message on first failure.
+// A poison message is drained after MAX_SEND_ATTEMPTS so it can't block the queue.
+const MAX_SEND_ATTEMPTS = 3;
+const sendAttempts = new Map<number, number>();
+
 function startOutgoingPoller(): void {
   setInterval(async () => {
     const pending = fetchPendingOutgoing();
@@ -123,10 +135,18 @@ function startOutgoingPoller(): void {
         if (!groupId) { console.warn(`[Bot] No group ID for label "${msg.group_label}"`); continue; }
         await client.sendMessage(groupId, msg.body);
         markOutgoingSent(msg.id!);
+        sendAttempts.delete(msg.id!);
         console.log(`[Bot] Sent outgoing message ${msg.id} to ${msg.group_label}`);
       } catch (err: any) {
-        console.error(`[Bot] Failed to send outgoing message ${msg.id}, draining from queue:`, err.message);
-        markOutgoingSent(msg.id!);
+        const attempt = (sendAttempts.get(msg.id!) ?? 0) + 1;
+        if (attempt < MAX_SEND_ATTEMPTS) {
+          sendAttempts.set(msg.id!, attempt);
+          console.error(`[Bot] Send failed for message ${msg.id} (attempt ${attempt}/${MAX_SEND_ATTEMPTS}), will retry:`, err.message);
+        } else {
+          sendAttempts.delete(msg.id!);
+          markOutgoingSent(msg.id!);
+          console.error(`[Bot] Send failed for message ${msg.id} after ${MAX_SEND_ATTEMPTS} attempts, dropping:`, err.message);
+        }
       }
     }
   }, 30000);
