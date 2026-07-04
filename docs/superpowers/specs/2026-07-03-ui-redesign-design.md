@@ -233,18 +233,77 @@ This is where the old Dashboard table lives for debugging.
 
 ---
 
-## 8. Files to Create/Modify
+## 8. Knowledge Base Generation
+
+### 8.1 Purpose
+A one-time (and re-runnable) pass over all scraped messages that produces a structured knowledge document about FASIPE ADS — professors, subjects, delivery patterns, communication norms. Every LLM call in the system (briefing, drafter, delivery detector, context monitor) injects this as system context, making them significantly smarter without re-reading raw messages each time.
+
+### 8.2 How It Runs
+- Triggered manually via `POST /api/knowledge/generate` (one-time setup, re-run when significantly more messages accumulate)
+- Reads all messages in batches from DB, passes to OpenCode Go LLM — `deepseek-v4-flash` via `OPENCODE_BASE_URL` (same client as extraction, same `OPENCODE_MODEL` env var)
+- LLM synthesizes a structured document in Portuguese
+
+### 8.3 Output Structure (stored in `knowledge_base` table)
+```json
+{
+  "professors": [
+    {
+      "name": "Mônica",
+      "subjects": ["Metodologia"],
+      "delivery_patterns": ["Google Forms during class", "Google Docs shared to group"],
+      "announcement_style": "formal, always in profs group"
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Engenharia de Software",
+      "professor": "...",
+      "typical_activities": ["trabalhos em grupo", "provas N1/N2"],
+      "delivery_method": "google_docs"
+    }
+  ],
+  "group_norms": {
+    "profs": "official announcements, deadlines, links — authoritative",
+    "alunos": "discussion, rumors, confirmation of completed tasks, peer help"
+  },
+  "delivery_patterns": {
+    "google_forms": ["Mônica", "forms during class"],
+    "in_person": ["provas always presencial", "lab activities"],
+    "whatsapp": ["quick confirmations", "link drops in alunos group"]
+  }
+}
+```
+
+### 8.4 DB Table
+```sql
+CREATE TABLE IF NOT EXISTS knowledge_base (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL, -- full JSON document
+  generated_at TEXT NOT NULL,
+  messages_read INTEGER DEFAULT 0
+);
+```
+Only latest row is used. Re-generation appends a new row.
+
+### 8.5 Injection
+`src/server/llm.ts` (shared LLM client) reads latest `knowledge_base` row and prepends it to every system prompt as: `"## Contexto do grupo e universidade\n" + content`.
+
+---
+
+## 10. Files to Create/Modify
 
 | File | Action |
 |------|--------|
 | `shared/schema.sql` | Add `briefings` table; add delivery columns to `activities` |
+| `src/server/llm.ts` | New — shared LLM client (wraps OpenCode API, injects knowledge base into every system prompt) |
+| `src/server/knowledge.ts` | New — knowledge base generator (deepseek-v4-flash, batch reads all messages) |
 | `src/server/briefing.ts` | New — briefing generator |
 | `src/server/deliveryDetector.ts` | New — graded classifier + method detector (LLM) |
 | `src/server/contextMonitor.ts` | New — scans new messages for activity context |
 | `src/server/drafter.ts` | New — submission draft generator (LLM), triggered at T-3 |
 | `src/server/delivery.ts` | New — dispatcher (Playwright / WhatsApp bot / in-person) |
 | `src/server/db.ts` | Add briefing functions; update `fetchActivities` with urgency + delivery fields; add delivery update functions |
-| `src/server/server.ts` | Add scheduler; new endpoints (`/api/briefing`, `/api/activities/:id/delivery`, `/api/activities/:id/deliver`); update `/api/stats` |
+| `src/server/server.ts` | Add scheduler; new endpoints (`/api/briefing`, `/api/activities/:id/delivery`, `/api/activities/:id/deliver`, `POST /api/knowledge/generate`); update `/api/stats` |
 | `src/server/extraction.ts` | Call briefing + delivery detector + context monitor after each run |
 | `src/bot/index.ts` | Add send capability for WhatsApp delivery method |
 | `src/frontend/toolProvider.ts` | Add `get_briefing`; update `get_activities`; add delivery mutation tools |
@@ -254,7 +313,7 @@ This is where the old Dashboard table lives for debugging.
 
 ---
 
-## 9. Out of Scope (Future)
+## 11. Out of Scope (Future)
 - Push/browser notifications for new extractions
 - Smart date re-evaluation for stale relative dates ("semana que vem" in old messages)
 - Multi-user support
