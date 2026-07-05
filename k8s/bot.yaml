@@ -20,8 +20,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: ads-painel-data
-        - name: wwebjs-auth
-          emptyDir: {}
       containers:
         - name: bot
           image: ads-painel:latest
@@ -38,8 +36,6 @@ spec:
               mountPath: /dev/shm
             - name: data
               mountPath: /app/data
-            - name: wwebjs-auth
-              mountPath: /app/bot/.wwebjs_auth
           resources:
             requests:
               memory: "512Mi"
