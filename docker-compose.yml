@@ -6,11 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ads-painel-app
-    ports:
-      - '3000:3000'
     environment:
       - NODE_ENV=production
-      - PORT=3000
       - DB_PATH=./data/app.db
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
       - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-https://opencode.ai/zen/go/v1}
@@ -23,12 +20,6 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    healthcheck:
-      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
 volumes:
   whatsapp-auth:
