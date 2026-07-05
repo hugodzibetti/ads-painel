@@ -214,23 +214,41 @@ export function insertActivities(activities: Activity[]): number[] {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  for (const act of activities) {
-    const info = stmt.run(
-      act.type,
-      act.title,
-      act.description || '',
-      act.due_date,
-      act.source_message_id,
-      act.status || 'pendente',
-      act.confidence || 'media',
-      new Date().toISOString()
-    );
-    if (info.lastInsertRowid) {
-      insertedIds.push(Number(info.lastInsertRowid));
+  // One transaction: the whole batch lands or none of it does (no partial insert).
+  const insertAll = database.transaction((acts: Activity[]) => {
+    for (const act of acts) {
+      const info = stmt.run(
+        act.type,
+        act.title,
+        act.description || '',
+        act.due_date,
+        act.source_message_id,
+        act.status || 'pendente',
+        act.confidence || 'media',
+        new Date().toISOString()
+      );
+      if (info.lastInsertRowid) {
+        insertedIds.push(Number(info.lastInsertRowid));
+      }
     }
-  }
+  });
+  insertAll(activities);
 
   return insertedIds;
+}
+
+export function insertActivitiesAndMark(activities: Activity[], messageIds: number[]): number[] {
+  // Atomic batch commit: insert the extracted activities AND mark their source
+  // messages processed in a single transaction. Prevents the crash window where
+  // activities are inserted but messages stay unprocessed → reprocessed next run
+  // → duplicate activities.
+  const database = openDb();
+  const commit = database.transaction(() => {
+    const ids = insertActivities(activities);
+    markBatchProcessed(messageIds);
+    return ids;
+  });
+  return commit();
 }
 
 function computeUrgency(daysUntilDue: number, dueDateStr: string): { urgency_label: string; urgency_color: string } {
@@ -281,10 +299,15 @@ export function updateActivityDelivery(activityId: number, fields: Partial<Pick<
 
 export function appendActivityContext(activityId: number, item: { message_id: number; author: string; body: string; timestamp: string }): void {
   const database = openDb();
-  const row = database.prepare('SELECT delivery_context FROM activities WHERE id = ?').get(activityId) as any;
-  const existing: any[] = row?.delivery_context ? JSON.parse(row.delivery_context) : [];
-  existing.push(item);
-  database.prepare('UPDATE activities SET delivery_context = ? WHERE id = ?').run(JSON.stringify(existing), activityId);
+  // Read-modify-write of the JSON array must be atomic; otherwise concurrent
+  // appends race and silently drop items (last writer overwrites the whole array).
+  const append = database.transaction(() => {
+    const row = database.prepare('SELECT delivery_context FROM activities WHERE id = ?').get(activityId) as any;
+    const existing: any[] = row?.delivery_context ? JSON.parse(row.delivery_context) : [];
+    existing.push(item);
+    database.prepare('UPDATE activities SET delivery_context = ? WHERE id = ?').run(JSON.stringify(existing), activityId);
+  });
+  append();
 }
 
 export function insertBriefing(content: string, activitiesCount: number): void {
