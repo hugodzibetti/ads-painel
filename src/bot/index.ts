@@ -1,4 +1,5 @@
-import { Client, LocalAuth, MessageTypes } from 'whatsapp-web.js';
+import whatsappWeb from 'whatsapp-web.js';
+const { Client, LocalAuth, MessageTypes } = whatsappWeb;
 import qrcode from 'qrcode-terminal';
 import path from 'node:path';
 import 'dotenv/config';

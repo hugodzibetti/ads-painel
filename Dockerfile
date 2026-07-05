@@ -26,8 +26,7 @@ WORKDIR /app
 
 # Install system dependencies for whatsapp-web.js
 RUN apk add --no-cache \
-    chromium \
-    noto-sans
+    chromium
 
 # Copy package files
 COPY package.json package-lock.json* ./

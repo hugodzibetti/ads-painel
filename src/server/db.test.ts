@@ -102,6 +102,37 @@ describe('fetchUnprocessedMessages / fetchUnprocessedCount / markBatchProcessed'
   });
 });
 
+describe('insertActivitiesAndMark (atomic batch commit)', () => {
+  it('inserts the activities and marks the source messages processed in one call', async () => {
+    const { insertMessage, fetchUnprocessedMessages, fetchUnprocessedCount, insertActivitiesAndMark, fetchActivities } =
+      await freshDb();
+    insertMessage('m1', 'alunos', 'A', 'body', '2026-01-01T10:00:00.000Z');
+    const [msg] = fetchUnprocessedMessages(10);
+
+    const ids = insertActivitiesAndMark(
+      [{ type: 'prova', title: 'Prova', due_date: '2026-02-01', source_message_id: msg.id! }],
+      [msg.id!]
+    );
+
+    expect(ids).toHaveLength(1);
+    expect(fetchActivities()).toHaveLength(1);
+    expect(fetchUnprocessedCount()).toBe(0);
+  });
+
+  it('still marks messages processed when there are no activities to insert', async () => {
+    const { insertMessage, fetchUnprocessedMessages, fetchUnprocessedCount, insertActivitiesAndMark, fetchActivities } =
+      await freshDb();
+    insertMessage('m1', 'alunos', 'A', 'body', '2026-01-01T10:00:00.000Z');
+    const [msg] = fetchUnprocessedMessages(10);
+
+    const ids = insertActivitiesAndMark([], [msg.id!]);
+
+    expect(ids).toEqual([]);
+    expect(fetchActivities()).toHaveLength(0);
+    expect(fetchUnprocessedCount()).toBe(0);
+  });
+});
+
 describe('insertActivities / fetchActivities / updateActivityStatus', () => {
   it('inserts activities and returns their generated ids', async () => {
     const { insertMessage, fetchUnprocessedMessages, insertActivities } = await freshDb();

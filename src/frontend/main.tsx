@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { Component, StrictMode, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider, createTheme, Card, CardHeader, Buttons, Button } from '@openuidev/react-ui';
 import '@openuidev/react-ui/components.css';
@@ -17,6 +17,28 @@ const PATH_TO_PAGE: Record<string, Page> = {
 };
 
 const theme = createTheme({ interactiveAccentDefault: '#0066cc' });
+
+// Catches any render/query error so a failed API call shows a recoverable card
+// instead of a blank white screen. Keyed by page so navigating away clears it.
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <Card variant="sunk" style={{ margin: 16, padding: 16 }}>
+          <CardHeader title="Algo deu errado" subtitle="A página não pôde ser carregada — verifique se o servidor está no ar." />
+          <Button variant="primary" onClick={() => window.location.reload()}>
+            Recarregar
+          </Button>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const [page, setPage] = useState<Page>(PATH_TO_PAGE[window.location.pathname] ?? 'dashboard');
@@ -53,9 +75,11 @@ function App() {
           </Buttons>
         }
       />
-      {page === 'dashboard' && <Dashboard />}
-      {page === 'messages' && <Messages />}
-      {page === 'status' && <Status />}
+      <ErrorBoundary key={page}>
+        {page === 'dashboard' && <Dashboard />}
+        {page === 'messages' && <Messages />}
+        {page === 'status' && <Status />}
+      </ErrorBoundary>
     </Card>
   );
 }

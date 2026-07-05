@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   fetchUnprocessedMessages,
   fetchUnprocessedCount,
-  markBatchProcessed,
-  insertActivities,
+  insertActivitiesAndMark,
   checkDuplicateActivity,
   insertLLMUsage,
   updateActivityDelivery,
@@ -84,7 +83,7 @@ async function runExtractionInner(batchSize: number, maxBatches: number): Promis
       const data = extractJsonFromResponse(content);
       if (!data || !Array.isArray(data.items)) {
         console.warn(`[Extraction] Batch ${batchNum + 1}: invalid JSON, marking processed`);
-        markBatchProcessed(messageIds);
+        insertActivitiesAndMark([], messageIds);
         totalProcessed += messageIds.length;
         allProcessedMessages.push(...messages);
         continue;
@@ -107,13 +106,9 @@ async function runExtractionInner(batchSize: number, maxBatches: number): Promis
         }
       }
 
-      if (dedupedItems.length > 0) {
-        const newIds = insertActivities(dedupedItems) ?? [];
-        totalActivities += dedupedItems.length;
-        allNewActivityIds.push(...newIds);
-      }
-
-      markBatchProcessed(messageIds);
+      const newIds = insertActivitiesAndMark(dedupedItems, messageIds);
+      totalActivities += dedupedItems.length;
+      allNewActivityIds.push(...newIds);
       totalProcessed += messageIds.length;
       allProcessedMessages.push(...messages);
     } catch (err: any) {

@@ -10,8 +10,7 @@ vi.mock('./llm.js', () => ({
 const dbMocks = vi.hoisted(() => ({
   fetchUnprocessedMessages: vi.fn(),
   fetchUnprocessedCount: vi.fn(),
-  markBatchProcessed: vi.fn(),
-  insertActivities: vi.fn(),
+  insertActivitiesAndMark: vi.fn(),
   checkDuplicateActivity: vi.fn(),
   insertLLMUsage: vi.fn(),
   fetchLatestKnowledgeBase: vi.fn().mockReturnValue(null),
@@ -53,8 +52,7 @@ describe('runExtraction', () => {
     process.env.OPENCODE_API_KEY = 'test-key';
     dbMocks.fetchUnprocessedMessages.mockReset();
     dbMocks.fetchUnprocessedCount.mockReset().mockReturnValue(0);
-    dbMocks.markBatchProcessed.mockReset();
-    dbMocks.insertActivities.mockReset().mockReturnValue([]);
+    dbMocks.insertActivitiesAndMark.mockReset().mockReturnValue([]);
     dbMocks.checkDuplicateActivity.mockReset().mockReturnValue(false);
     dbMocks.insertLLMUsage.mockReset();
     dbMocks.fetchActivities.mockReset().mockReturnValue([]);
@@ -81,7 +79,7 @@ describe('runExtraction', () => {
     expect(mockChatFn).not.toHaveBeenCalled();
   });
 
-  it('inserts valid extracted activities and marks the batch processed', async () => {
+  it('inserts valid extracted activities and marks the batch processed atomically', async () => {
     dbMocks.fetchUnprocessedMessages.mockReturnValueOnce([sampleMessage(1)]).mockReturnValueOnce([]);
     mockCompletion(
       JSON.stringify({
@@ -91,10 +89,10 @@ describe('runExtraction', () => {
 
     const result = await runExtraction();
 
-    expect(dbMocks.insertActivities).toHaveBeenCalledWith([
-      expect.objectContaining({ type: 'prova', title: 'Prova', source_message_id: 1 }),
-    ]);
-    expect(dbMocks.markBatchProcessed).toHaveBeenCalledWith([1]);
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith(
+      [expect.objectContaining({ type: 'prova', title: 'Prova', source_message_id: 1 })],
+      [1]
+    );
     expect(result.activities_extracted).toBe(1);
     expect(result.messages_processed).toBe(1);
     expect(result.total_tokens_used).toBe(15);
@@ -119,8 +117,7 @@ describe('runExtraction', () => {
     mockCompletion('not json at all');
 
     const result = await runExtraction();
-    expect(dbMocks.markBatchProcessed).toHaveBeenCalledWith([1]);
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
     expect(result.messages_processed).toBe(1);
   });
@@ -130,7 +127,7 @@ describe('runExtraction', () => {
     mockCompletion('here is the result: {not: valid, json}');
 
     const result = await runExtraction();
-    expect(dbMocks.markBatchProcessed).toHaveBeenCalledWith([1]);
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
   });
 
@@ -139,7 +136,7 @@ describe('runExtraction', () => {
     mockCompletion(JSON.stringify({ items: [{ type: 'prova', title: 'Prova' }] }));
 
     const result = await runExtraction();
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
   });
 
@@ -152,7 +149,7 @@ describe('runExtraction', () => {
     );
 
     const result = await runExtraction();
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
   });
 
@@ -165,7 +162,7 @@ describe('runExtraction', () => {
     );
 
     const result = await runExtraction();
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
   });
 
   it('defaults an invalid confidence to media instead of discarding the item', async () => {
@@ -177,7 +174,10 @@ describe('runExtraction', () => {
     );
 
     await runExtraction();
-    expect(dbMocks.insertActivities).toHaveBeenCalledWith([expect.objectContaining({ confidence: 'media' })]);
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith(
+      [expect.objectContaining({ confidence: 'media' })],
+      [1]
+    );
   });
 
   it('discards items with a non-ISO due_date', async () => {
@@ -189,11 +189,11 @@ describe('runExtraction', () => {
     );
 
     const result = await runExtraction();
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
   });
 
-  it('skips items that are duplicates of existing activities', async () => {
+  it('skips items that are duplicates of existing activities but still marks the batch', async () => {
     dbMocks.fetchUnprocessedMessages.mockReturnValueOnce([sampleMessage(1)]).mockReturnValueOnce([]);
     dbMocks.checkDuplicateActivity.mockReturnValue(true);
     mockCompletion(
@@ -203,9 +203,8 @@ describe('runExtraction', () => {
     );
 
     const result = await runExtraction();
-    expect(dbMocks.insertActivities).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).toHaveBeenCalledWith([], [1]);
     expect(result.activities_extracted).toBe(0);
-    expect(dbMocks.markBatchProcessed).toHaveBeenCalledWith([1]);
   });
 
   it('records the LLM error and continues instead of throwing when a batch call rejects', async () => {
@@ -214,7 +213,7 @@ describe('runExtraction', () => {
 
     const result = await runExtraction();
     expect(result.errors).toEqual(['Batch 1 extraction error: rate limited']);
-    expect(dbMocks.markBatchProcessed).not.toHaveBeenCalled();
+    expect(dbMocks.insertActivitiesAndMark).not.toHaveBeenCalled();
   });
 
   it('stops after maxBatches even if messages remain unprocessed', async () => {
