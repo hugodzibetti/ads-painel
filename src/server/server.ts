@@ -1,5 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import {
   fetchActivities,
@@ -27,6 +29,10 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve built frontend (dist/public) in production
+const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public');
+app.use(express.static(publicDir));
 
 openDb();
 seedKnowledgeBaseIfEmpty();
@@ -178,7 +184,9 @@ app.get('/api/stats', (req: Request, res: Response): void => {
 // --- Extract (manual) ---
 app.post('/api/extract', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { batchSize = 30, maxBatches = 10 } = req.body;
+    // Clamp to the deliberate cost-control caps (30 msg/batch, 10 batches)
+    const batchSize = Math.min(Math.max(Number(req.body?.batchSize) || 30, 1), 30);
+    const maxBatches = Math.min(Math.max(Number(req.body?.maxBatches) || 10, 1), 10);
     res.json(await runExtraction(batchSize, maxBatches));
   } catch { res.status(500).json({ error: 'Extraction failed' }); }
 });
@@ -192,6 +200,12 @@ app.post('/api/knowledge/generate', async (req: Request, res: Response): Promise
 });
 
 app.get('/health', (_req: Request, res: Response): void => { res.json({ status: 'ok' }); });
+
+// SPA fallback: serve index.html for non-API GETs (deep links / client routing)
+app.use((req: Request, res: Response, next): void => {
+  if (req.method !== 'GET' || req.path.startsWith('/api') || req.path === '/health') { next(); return; }
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
 
 app.listen(port, () => {
   console.log(`[Server] Listening on http://localhost:${port}`);

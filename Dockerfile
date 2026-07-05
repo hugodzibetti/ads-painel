@@ -41,8 +41,9 @@ COPY --from=builder /app/dist ./dist
 # Copy shared schema
 COPY shared/ ./shared/
 
-# Create data directory
-RUN mkdir -p ./data
+# Create data directory and hand /app to the built-in unprivileged node user
+RUN mkdir -p ./data && chown -R node:node /app
+USER node
 
 # Expose port
 EXPOSE 3000

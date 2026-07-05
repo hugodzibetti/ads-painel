@@ -60,20 +60,13 @@ client.on('message', async (message: any) => {
     const chat = message.getChat ? await message.getChat() : null;
     if (!chat || !chat.isGroup) return;
 
-    // Filter out system messages and notifications
-    if (message.type === MessageTypes.NOTIFICATION_CHANNEL_INVITE) return;
-    if (message.type === MessageTypes.NOTIFICATION_CHANNEL_ADMIN_RESTRICT) return;
-    if (message.type === MessageTypes.NOTIFICATION_CHANNEL_ADMIN_UNRESTRICT) return;
-    if (message.type === MessageTypes.SYSTEM) return;
-    if (message.type === MessageTypes.STICKER) return;
-
-    // Only accept specific message types
+    // Whitelist: only accept real content types (drops all system/notification/sticker noise)
     const acceptedTypes = [
       MessageTypes.TEXT,
       MessageTypes.IMAGE,
       MessageTypes.VIDEO,
       MessageTypes.AUDIO,
-      MessageTypes.PTT,
+      MessageTypes.VOICE,
       MessageTypes.DOCUMENT,
     ];
     if (!acceptedTypes.includes(message.type)) return;

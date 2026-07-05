@@ -40,11 +40,25 @@ export interface ExtractionResult {
   errors: string[];
 }
 
+let extractionInProgress = false;
+
 export async function runExtraction(batchSize = 30, maxBatches = 10): Promise<ExtractionResult> {
   if (!process.env.OPENCODE_API_KEY) {
     return { run_id: '', total_tokens_used: 0, activities_extracted: 0, messages_processed: 0, messages_remaining: 0, errors: ['OPENCODE_API_KEY is not set'] };
   }
+  // Prevent overlapping runs (manual endpoint + scheduler) from double-spending tokens
+  if (extractionInProgress) {
+    return { run_id: '', total_tokens_used: 0, activities_extracted: 0, messages_processed: 0, messages_remaining: fetchUnprocessedCount(), errors: ['Extraction already in progress'] };
+  }
+  extractionInProgress = true;
+  try {
+    return await runExtractionInner(batchSize, maxBatches);
+  } finally {
+    extractionInProgress = false;
+  }
+}
 
+async function runExtractionInner(batchSize: number, maxBatches: number): Promise<ExtractionResult> {
   const runId = randomUUID();
   const model = getModel();
   let totalTokens = 0, totalActivities = 0, totalProcessed = 0;
