@@ -276,8 +276,8 @@ export function fetchActivities(status?: string, urgency?: string, limit: number
   `;
   const params: any[] = [];
   if (status) { query += ' AND a.status = ?'; params.push(status); }
-  if (urgency === 'urgent') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) <= 7'; }
-  if (urgency === 'future') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) > 7'; }
+  if (urgency === 'urgent') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) BETWEEN 0 AND 6'; }
+  if (urgency === 'future') { query += ' AND ROUND(julianday(DATE(a.due_date)) - julianday(DATE(\'now\', \'localtime\'))) > 6'; }
   query += ' ORDER BY a.due_date ASC LIMIT ?';
   params.push(limit);
 
